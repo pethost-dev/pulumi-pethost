@@ -1,0 +1,71 @@
+# Releases the Pulumi provider: the tag v<version> builds the plugin, pulumi-resource-pethost, for
+# six targets and publishes its archives with their checksums as a GitHub release of this
+# repository.
+#
+# This file defines what a release is made of. Pulumi's engine asks for exactly these names,
+# from the schema's pluginDownloadURL, github://api.github.com/pethost-dev/pulumi-pethost:
+#
+#   releases/download/v<version>/pulumi-resource-pethost-v<version>-<os>-<cpu>.tar.gz
+#       darwin, linux, windows; amd64, arm64; the plugin at the archive's root, with LICENSE
+#   releases/download/v<version>/checksums.txt   sha256sum's line for each archive
+#
+# A program that has the package goes on asking for these names: an archive renamed here is a
+# plugin its engine no longer finds.
+#
+# Nobody tags by hand. The tree is generated in Pethost's own repository (sdk/pulumi), whose
+# workflow pushes it here with the tag. That workflow may not write this directory: this file is
+# placed here by hand, and again when it changes there (sdk/pulumi/workflows/release.yml).
+#
+# Actions are GitHub's own only, each pinned to a commit.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write # The release.
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The toolchain the tree is checked with before it is pushed here. go.mod names the
+      # oldest one the module may be built with, which is not the one a release is built with.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.3'
+          cache-dependency-path: provider/go.sum
+
+      - name: Build the six archives and the checksums
+        run: |
+          version=${GITHUB_REF_NAME#v}
+          schema=provider/cmd/pulumi-resource-pethost/schema.json
+          grep -q "^  \"version\": \"$version\",$" "$schema" ||
+            { echo "the tag is $GITHUB_REF_NAME, and $schema says another version" >&2; exit 1; }
+
+          mkdir dist
+          for target in darwin/amd64 darwin/arm64 linux/amd64 linux/arm64 windows/amd64 windows/arm64; do
+            os=${target%/*}
+            cpu=${target#*/}
+            binary=pulumi-resource-pethost
+            [ "$os" != windows ] || binary=$binary.exe
+            work=$(mktemp -d)
+            (cd provider && CGO_ENABLED=0 GOOS=$os GOARCH=$cpu go build -trimpath -ldflags "-s -w" \
+              -o "$work/$binary" ./cmd/pulumi-resource-pethost)
+            cp LICENSE "$work/"
+            tar -C "$work" -czf "dist/pulumi-resource-pethost-v$version-$os-$cpu.tar.gz" "$binary" LICENSE
+          done
+
+          (cd dist && sha256sum -- *.tar.gz >checksums.txt)
+          cat dist/checksums.txt
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --title "Pulumi provider for Pethost ${GITHUB_REF_NAME#v}" --generate-notes
