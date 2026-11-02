@@ -1,0 +1,19 @@
+name: pethost-example
+runtime: yaml
+description: A page on Pethost, deployed from its compose.yaml.
+
+resources:
+  hello:
+    type: pethost:Project
+    properties:
+      projectId: hello
+      files:
+        - path: /compose.yaml
+          text: |
+            services:
+              web:
+                image: nginxdemos/hello:plain-text
+                ports: ["80"]
+
+outputs:
+  url: ${hello.url}

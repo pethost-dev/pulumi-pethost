@@ -1,0 +1,3264 @@
+{
+  "name": "pethost",
+  "displayName": "Pethost",
+  "version": "0.1.0",
+  "description": "Manage Pethost's projects and databases as code.",
+  "keywords": [
+    "pulumi",
+    "pethost",
+    "category/cloud",
+    "kind/native",
+    "docker-compose",
+    "hosting",
+    "paas"
+  ],
+  "homepage": "https://pethost.dev",
+  "license": "MIT",
+  "repository": "https://github.com/pethost-dev/pulumi-pethost",
+  "logoUrl": "https://pethost.dev/favicon.svg",
+  "pluginDownloadURL": "github://api.github.com/pethost-dev/pulumi-pethost",
+  "publisher": "Pethost",
+  "meta": {
+    "moduleFormat": "(.*)"
+  },
+  "language": {
+    "csharp": {
+      "respectSchemaVersion": true,
+      "rootNamespace": "PethostDev"
+    },
+    "go": {
+      "importBasePath": "github.com/pethost-dev/pulumi-pethost/sdk/go/pethost",
+      "respectSchemaVersion": true
+    },
+    "java": {
+      "basePackage": "dev.pethost"
+    },
+    "nodejs": {
+      "packageName": "@pethost-dev/pulumi-pethost",
+      "respectSchemaVersion": true
+    },
+    "python": {
+      "packageName": "pulumi_pethost",
+      "respectSchemaVersion": true
+    }
+  },
+  "config": {
+    "variables": {
+      "token": {
+        "type": "string",
+        "description": "The account's API token, `pth_…`: make one in the panel's Settings, under API tokens. Absent = the environment's `PETHOST_TOKEN`.",
+        "secret": true
+      },
+      "url": {
+        "type": "string",
+        "description": "Where the API is served. Absent = the environment's `PETHOST_URL`, else https://console.pethost.dev."
+      }
+    }
+  },
+  "provider": {
+    "description": "The provider of Pethost's API.",
+    "inputProperties": {
+      "token": {
+        "type": "string",
+        "description": "The account's API token, `pth_…`: make one in the panel's Settings, under API tokens. Absent = the environment's `PETHOST_TOKEN`.",
+        "secret": true
+      },
+      "url": {
+        "type": "string",
+        "description": "Where the API is served. Absent = the environment's `PETHOST_URL`, else https://console.pethost.dev."
+      }
+    }
+  },
+  "resources": {
+    "pethost:index:Database": {
+      "description": "A database project, Postgres, MariaDB (for an app that asks for MySQL or MariaDB) or Valkey: the machine writes its compose.yaml and /.env and deploys it, with no address. Make it before the app that uses it: the app reaches it at the host `\u003cprojectId\u003e` once linked (the app's CreateProject `linkDatabases`, which may follow at once, as its deploy waits for this one; `link` or LinkDatabase for an app that exists, as the apps' user and writing nothing into its /.env), and Project.database says how to sign in. Or a copy of a database's snapshot, with passwords of its own and none of its links. Answers as CreateProject does. INVALID_ARGUMENT = an engine or a size Machine.databaseEngines does not offer, or a projectId with \"_\", that is a number or that every container's /etc/hosts names (it is the host name apps use). NOT_FOUND = no such snapshot or app. FAILED_PRECONDITION = the snapshot is of no database of that engine; + DatabaseLinkRefusal = an app of `link` cannot be linked, and nothing was created.\n\nPulumi creates it with CreateDatabase, waiting for its operation's end. It sends a change of `memoryLimitBytes` with RunProjectAction's `setDatabaseSize`, waiting for its operation's end. A change of `projectId`, `engine` or `fromSnapshotId` replaces it: Pulumi deletes it first, since the new one takes the same `projectId`, then creates it. If its create's operation fails, or the provider does not see it end, Pulumi keeps it with the failure, and the next run sends DeployProject until that succeeds. It deletes it with RunProjectAction's `deleteProject`, waiting for its operation's end. Its outputs are the fields of the Project that GetProject answers with, but those its inputs name; a refresh reads them anew.\n\ndeleteProject: a final backup while backups are on, then containers, volumes, files, hosts, logs, and an app's user and database of its own in a shared database, data and all. Snapshots stay (GetMachine.deletedProjects), and restoring one brings the project back, source included; with backups off there is none, and it is gone for good. The databases it was linked to stay: delete each with its own deleteProject.",
+      "properties": {
+        "alerts": {
+          "$ref": "#/types/pethost:index:ProjectAlerts",
+          "description": "What Pethost watches and how each part stands."
+        },
+        "cpuUsedCores": {
+          "type": "number"
+        },
+        "database": {
+          "$ref": "#/types/pethost:index:Database",
+          "description": "Set = a database project (CreateDatabase): its engine, its state and how apps sign in.",
+          "language": {
+            "csharp": {
+              "name": "DatabaseInfo"
+            }
+          }
+        },
+        "deployId": {
+          "type": "string",
+          "description": "The operationId of the deploy whose files the project has. For a deleted project brought back, the RESTORE that did it. Empty = no deploy yet."
+        },
+        "deployStatus": {
+          "$ref": "#/types/pethost:index:OperationStatus",
+          "description": "How that operation went, or is going. Unspecified = no deploy yet."
+        },
+        "deployTime": {
+          "type": "string",
+          "description": "When the current deploy made its files the project's. Absent = no deploy yet, or one that failed or was cancelled leaving no service with a container: nothing runs."
+        },
+        "engine": {
+          "$ref": "#/types/pethost:index:DatabaseEngine",
+          "description": "Changing it replaces the database: Pulumi deletes it first, and what it held goes with it.",
+          "willReplaceOnChanges": true
+        },
+        "fromSnapshotId": {
+          "type": "string",
+          "description": "A snapshot of a database of `engine` (Project.snapshots, GetMachine.deletedProjects): the new one starts with its data. Empty = an empty database.\n\nChanging it replaces the database: Pulumi deletes it first, and what it held goes with it.",
+          "willReplaceOnChanges": true
+        },
+        "hosts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:Host"
+          },
+          "description": "Every host of the routes, in the order of its first route."
+        },
+        "httpTrafficLastDay": {
+          "$ref": "#/types/pethost:index:HttpTrafficSummary",
+          "description": "Measured every few minutes."
+        },
+        "incidents": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:Incident"
+          },
+          "description": "The newest 5 that GetProjectRequest.incidentsBefore selects, newest first: an open one in full but its evidence (GetIncident), a resolved one as its id, kind, times, message, afterOperationId, quietReason and flapping."
+        },
+        "linkedDatabases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The database projects this one reaches (LinkDatabase), each at the host of its projectId."
+        },
+        "memoryLimitBytes": {
+          "type": "integer",
+          "description": "One of the engine's DatabaseEngineOffer.sizes. 0 = its defaultMemoryLimitBytes; a copy keeps its snapshot's.\n\nA change is sent with RunProjectAction's `setDatabaseSize`: setDatabaseSize gives a database another of its engine's sizes (Machine.databaseEngines; its size now is Project.database.memoryLimitBytes): the machine writes its compose.yaml anew for that size, with the settings that follow from it and the image it runs, so never edit them by hand; what else was written there goes. The database restarts, and its apps lose their connections for a few seconds: one that does not connect again shows as restarting (GetMachine). A size changes nothing on the bill: a smaller one only leaves memory to the other projects. A Valkey whose data is more than the size keeps (its maxmemory, 70 % of the size) is refused before anything changes, and the refusal gives both figures: FAILED_PRECONDITION + DatabaseSizeRefusal, as for a Valkey that does not answer now, asked to shrink, and a database whose data is in another volume than the one the file names. FAILED_PRECONDITION alone = the project is no database. INVALID_ARGUMENT = a size its engine does not offer (the message lists them)."
+        },
+        "memoryUsedBytes": {
+          "type": "integer"
+        },
+        "metadata": {
+          "$ref": "#/types/pethost:index:ProjectMetadata"
+        },
+        "moreIncidents": {
+          "type": "boolean",
+          "description": "True = older ones remain: page with incidentsBefore and incidentsBeforeId."
+        },
+        "operations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:Operation"
+          },
+          "description": "Newest first, every one the machine keeps: the newest 20, any still in progress, and however old, the current deploy's (deployId) and those whose files it keeps for a rollback (Operation.filesKept). Older ones are gone."
+        },
+        "passwordProtected": {
+          "type": "boolean",
+          "description": "True = every route asks visitors for the project's password (`xPethost.password`). The password itself is never returned."
+        },
+        "problems": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:ProjectProblem"
+          },
+          "description": "Something that needs attention."
+        },
+        "projectId": {
+          "type": "string",
+          "description": "As CreateProject's, without \"_\", not a number and no name of /etc/hosts: it is the host name apps use.\n\nChanging it replaces the database: Pulumi deletes it first, and what it held goes with it.",
+          "willReplaceOnChanges": true
+        },
+        "routes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:Route"
+          },
+          "description": "x-pethost.routes as the machine holds them, in order: the list xPethost.routes replaces, so send these back with your change to add, change or remove one."
+        },
+        "runningServicesAction": {
+          "$ref": "#/types/pethost:index:RunningServicesAction",
+          "description": "The startServices, stopServices or restartServices that runs now, whoever called it (RunProjectAction waits for its end). Until then the project takes no other action or deploy, and Service.state is still what it was before. Absent = none."
+        },
+        "services": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:Service"
+          },
+          "description": "By name."
+        },
+        "snapshotCount": {
+          "type": "integer",
+          "description": "The project's, in all; see snapshotListTime."
+        },
+        "snapshotListTime": {
+          "type": "string",
+          "description": "When the machine read the list of snapshots that snapshotCount, Volume.snapshotCount and Volume.lastBackupTime come from (Machine.snapshotListTime, as sampled with them). Absent = the list is not known: backups are off, or it is not read yet (Machine.snapshotListFailureMessage says why); a count of 0 then does not mean none."
+        },
+        "snapshots": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:Snapshot"
+          },
+          "description": "The newest 10, newest first, of those GetProjectRequest's snapshotsBefore and snapshotsVolume select. Empty while backups are off or the list is not read yet (snapshotListTime)."
+        },
+        "source": {
+          "$ref": "#/types/pethost:index:ProjectSource",
+          "description": "Where the files come from (THE PROJECT IS ITS DIRECTORY)."
+        },
+        "uptimeDays": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:UptimeDay"
+          },
+          "description": "Oldest first, GetProjectRequest.uptimeDayCount of them, today's last."
+        },
+        "url": {
+          "type": "string",
+          "description": "As in ProjectSummary."
+        },
+        "volumes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:Volume"
+          },
+          "description": "Every one the machine holds for the project, by name."
+        },
+        "xPethostAppliesAtOnce": {
+          "type": "boolean",
+          "description": "True = the current deploy succeeded and every service has a container, so a deploy whose files differ only inside `x-pethost` (or not at all) applies at once, with no build or pull, and no restart but the one DeployProject names. False = the next deploy runs in full."
+        }
+      },
+      "required": [
+        "projectId"
+      ],
+      "inputProperties": {
+        "engine": {
+          "$ref": "#/types/pethost:index:DatabaseEngine",
+          "description": "Changing it replaces the database: Pulumi deletes it first, and what it held goes with it.",
+          "willReplaceOnChanges": true
+        },
+        "fromSnapshotId": {
+          "type": "string",
+          "description": "A snapshot of a database of `engine` (Project.snapshots, GetMachine.deletedProjects): the new one starts with its data. Empty = an empty database.\n\nChanging it replaces the database: Pulumi deletes it first, and what it held goes with it.",
+          "willReplaceOnChanges": true
+        },
+        "memoryLimitBytes": {
+          "type": "integer",
+          "description": "One of the engine's DatabaseEngineOffer.sizes. 0 = its defaultMemoryLimitBytes; a copy keeps its snapshot's.\n\nA change is sent with RunProjectAction's `setDatabaseSize`: setDatabaseSize gives a database another of its engine's sizes (Machine.databaseEngines; its size now is Project.database.memoryLimitBytes): the machine writes its compose.yaml anew for that size, with the settings that follow from it and the image it runs, so never edit them by hand; what else was written there goes. The database restarts, and its apps lose their connections for a few seconds: one that does not connect again shows as restarting (GetMachine). A size changes nothing on the bill: a smaller one only leaves memory to the other projects. A Valkey whose data is more than the size keeps (its maxmemory, 70 % of the size) is refused before anything changes, and the refusal gives both figures: FAILED_PRECONDITION + DatabaseSizeRefusal, as for a Valkey that does not answer now, asked to shrink, and a database whose data is in another volume than the one the file names. FAILED_PRECONDITION alone = the project is no database. INVALID_ARGUMENT = a size its engine does not offer (the message lists them)."
+        },
+        "projectId": {
+          "type": "string",
+          "description": "As CreateProject's, without \"_\", not a number and no name of /etc/hosts: it is the host name apps use.\n\nChanging it replaces the database: Pulumi deletes it first, and what it held goes with it.",
+          "willReplaceOnChanges": true
+        }
+      },
+      "requiredInputs": [
+        "projectId"
+      ]
+    },
+    "pethost:index:Project": {
+      "description": "Creates a project from its files and deploys it. Waits for the deploy (waitSeconds) and answers with the operation and, once it ended, the project: its URL, its services' states, its problems. `violations` instead = nothing was created: change what each says, call again. SUCCEEDED says the containers run and listen, not what a page answers: open the URL once (401 = its password page).\n\nFiles, one of: the directory as it is on your disk, as an archive (CreateTransfer, then `uploadId`): nothing is retyped; `files`, text you send yourself, when there is no directory or no shell (never a file you have not read); `source.github`. /.env holds the secrets (`envFile: .env`). The compose file is the root's pethost.compose.yaml (so the repository's compose.yaml stays for development), else compose.yaml, compose.yml, docker-compose.yml or docker-compose.yaml; it becomes /compose.yaml, other compose and override files are dropped. Without one, a Dockerfile yields service `app` (reading /.env if any, its EXPOSE ports, a named volume per VOLUME of its last stage).\n\nA database (Postgres, MariaDB or Valkey) is CreateDatabase's: make the app's first, then link it here with `linkDatabases`, e.g. {databaseProjectId: \"recipes-db\", envPrefix: \"DATABASE\"}, and compose.yaml reads ${DATABASE_URL:?}. The app reaches each at the host \\\u003cdatabaseProjectId\u003e from its first start (its deploy waits for one still being made). ownUser, on an engine whose offer has ownUsers (Postgres, MariaDB; a Valkey has one user), to share a database other apps use: a user and a database of its own, named as the project, which they cannot reach; all are restored together. Only linkDatabases makes one: LinkDatabase links as the apps' user. envPrefix \"DATABASE\": the machine writes DATABASE_URL, _HOST, _PORT, _USER, _PASSWORD and _NAME into /.env, so no password is copied. A name /.env sets already is refused, as a laptop's .env in an archive may set one: send `files` with a /.env without it beside `uploadId`.\n\ncompose.yaml rules. Data lives in named volumes; all else a container writes is lost when it is recreated. Project files are bind-mounted read-only. HTTP comes through the proxy, to a host of a route in `x-pethost`, the one extension read, in the file or as `xPethost`:\n\n```\nx-pethost:\n  metadata: {name: Recipe Box, emoji: \"🥗\", description: One line, notes: Free text}\n  routes:\n    - {host: recipes.sam.pethost.app, service: web, port: 3000}\n    - {host: recipes.sam.pethost.app, path: /api, service: api, port: 8000, strip_path: true}\n```\n\n`ports:` stays as the file has it, and is never refused. A TCP port it publishes that answers HTTP gets its route by itself and is not opened on the machine: at `\u003cproject\u003e.\u003cMachine.appsDomain\u003e`, or `\u003cproject\u003e-\u003cservice\u003e.\u003cappsDomain\u003e` each when the project has several; `Project.url` has it when the call answers. Any other published port opens on the machine as written, at `\u003cMachine.hostname\u003e:\u003cport\u003e`, and one that is taken there fails the deploy; so does a web port once its route is removed. Never opened: a port bound to 127.0.0.1 (`sshCommand` tunnels to it), a machine port of the machine's own (80, 443, 22), and one nothing listens on within a minute of its start, until a later deploy finds it listening (`Service.publishedPorts` lists what is open). With `xPethost.routes` the routes are yours and the machine names none. A project that publishes no port gets `\u003cproject\u003e.\u003cappsDomain\u003e` in its first deploy, for the one port it listens on. A service with neither is private: the project's services reach it at `\u003cservice\u003e:\u003cport\u003e`. A password for visitors goes only as `xPethost.password`, never into the file: every route then answers 401 with a password page, over HTTPS only; nothing returns it (`Project.passwordProtected` says it is set); and `files` that write /compose.yaml keep the `password_hash` line the machine put in its `x-pethost`. All of compose.yaml is interpolated: $$ for $.\n\nThe file runs as written, or is refused: the machine corrects nothing in it, in any version. Refused, each violation saying what to write instead:\n\n- a volume's `name`; `driver` (but Docker's default, `local` or `bridge`), `driver_opts`, `external` or `ipam` of a volume or network: remove them.\n- a writable bind mount of the whole project (`.:/app`): add `:ro`.\n- a volume with no name (`- /data`): name it. Below a bind mount it is allowed, as scratch space (`/app/node_modules`).\n- `envFile` naming a file the files lack: write it, empty if it sets nothing, or give the entry `required: false`.\n- `privileged`, `cap_add`, `security_opt` (but `no-new-privileges`), `devices`, host namespaces, the Docker socket, a path outside the directory; more than one replica; `include` or `extends` from a URL; a git URL as a build context.\n\nNot refused, and read the machine's way: a `container_name` and a network's `name` name nothing on the machine, so two projects may write the same (the project's services still reach the container by it); a service with `profiles` runs only while `COMPOSE_PROFILES` in /.env names one of them, and is no service of the project until then; a bind mount of a folder without `:ro` (`./data:/data`) mounts the project's volume named after the path (`data`), which deploys keep and backups hold, with none of the version's files in it, so project files take `:ro`, and data is plainer in a named volume (`data:/data`, with `data:` under `volumes:`); a bind mount of a file without `:ro` mounts it read-only. An image's VOLUME that no mount covers fails the deploy (UNCOVERED_IMAGE_VOLUME): mount a named volume or a tmpfs there.\n\nALREADY_EXISTS = the id is taken (a retry with its operationId returns that operation). FAILED_PRECONDITION = the GitHub App cannot read the repository (see GetMachine.github), or no such branch or directory; + DatabaseLinkRefusal = a database of `linkDatabases` cannot be linked to it (databaseProjectId says which), and nothing was created. A deleted project's id inherits its snapshots.\n\nPulumi creates it with CreateProject, waiting for its operation's end. It sends a change of `files`, `xPethost` or `timeoutSeconds` with DeployProject, waiting for its operation's end. A change of `projectId`, `source` or `linkDatabases` replaces it: Pulumi deletes it first, since the new one takes the same `projectId`, then creates it. If its create's operation fails, or the provider does not see it end, Pulumi keeps it with the failure, and the next run sends DeployProject until that succeeds. It deletes it with RunProjectAction's `deleteProject`, waiting for its operation's end. Its outputs are the fields of the Project that GetProject answers with, but those its inputs name; a refresh reads them anew.\n\ndeleteProject: a final backup while backups are on, then containers, volumes, files, hosts, logs, and an app's user and database of its own in a shared database, data and all. Snapshots stay (GetMachine.deletedProjects), and restoring one brings the project back, source included; with backups off there is none, and it is gone for good. The databases it was linked to stay: delete each with its own deleteProject.",
+      "properties": {
+        "alerts": {
+          "$ref": "#/types/pethost:index:ProjectAlerts",
+          "description": "What Pethost watches and how each part stands."
+        },
+        "cpuUsedCores": {
+          "type": "number"
+        },
+        "database": {
+          "$ref": "#/types/pethost:index:Database",
+          "description": "Set = a database project (CreateDatabase): its engine, its state and how apps sign in."
+        },
+        "deployId": {
+          "type": "string",
+          "description": "The operationId of the deploy whose files the project has. For a deleted project brought back, the RESTORE that did it. Empty = no deploy yet."
+        },
+        "deployStatus": {
+          "$ref": "#/types/pethost:index:OperationStatus",
+          "description": "How that operation went, or is going. Unspecified = no deploy yet."
+        },
+        "deployTime": {
+          "type": "string",
+          "description": "When the current deploy made its files the project's. Absent = no deploy yet, or one that failed or was cancelled leaving no service with a container: nothing runs."
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:FileChange"
+          },
+          "description": "The project's files, e.g. [{path: \"/compose.yaml\", text: \"…\"}, {path: \"/.env\", text: \"…\"}], or those to write over the archive's or the commit's. A github source takes only /.env.\n\nA change is sent with DeployProject, with the edits its last value lacks (the others were made): Written in order over the current files, or over the new version's: e.g. [{path: \"/.env\", text: \"…\"}] writes that file whole, and the files not named stay. With no new version pethost.compose.yaml is refused: write /compose.yaml. github: only /.env. None = redeploy."
+        },
+        "hosts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:Host"
+          },
+          "description": "Every host of the routes, in the order of its first route."
+        },
+        "httpTrafficLastDay": {
+          "$ref": "#/types/pethost:index:HttpTrafficSummary",
+          "description": "Measured every few minutes."
+        },
+        "incidents": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:Incident"
+          },
+          "description": "The newest 5 that GetProjectRequest.incidentsBefore selects, newest first: an open one in full but its evidence (GetIncident), a resolved one as its id, kind, times, message, afterOperationId, quietReason and flapping."
+        },
+        "linkDatabases": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:DatabaseLinkRequest"
+          },
+          "description": "Changing it replaces the project: Pulumi deletes it first, and what it held goes with it.",
+          "willReplaceOnChanges": true
+        },
+        "linkedDatabases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The database projects this one reaches (LinkDatabase), each at the host of its projectId."
+        },
+        "memoryUsedBytes": {
+          "type": "integer"
+        },
+        "metadata": {
+          "$ref": "#/types/pethost:index:ProjectMetadata"
+        },
+        "moreIncidents": {
+          "type": "boolean",
+          "description": "True = older ones remain: page with incidentsBefore and incidentsBeforeId."
+        },
+        "operations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:Operation"
+          },
+          "description": "Newest first, every one the machine keeps: the newest 20, any still in progress, and however old, the current deploy's (deployId) and those whose files it keeps for a rollback (Operation.filesKept). Older ones are gone."
+        },
+        "passwordProtected": {
+          "type": "boolean",
+          "description": "True = every route asks visitors for the project's password (`xPethost.password`). The password itself is never returned."
+        },
+        "problems": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:ProjectProblem"
+          },
+          "description": "Something that needs attention."
+        },
+        "projectId": {
+          "type": "string",
+          "description": "New, [a-z0-9][a-z0-9_-]*, ≤63 chars; immutable.\n\nChanging it replaces the project: Pulumi deletes it first, and what it held goes with it.",
+          "willReplaceOnChanges": true
+        },
+        "routes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:Route"
+          },
+          "description": "x-pethost.routes as the machine holds them, in order: the list xPethost.routes replaces, so send these back with your change to add, change or remove one."
+        },
+        "runningServicesAction": {
+          "$ref": "#/types/pethost:index:RunningServicesAction",
+          "description": "The startServices, stopServices or restartServices that runs now, whoever called it (RunProjectAction waits for its end). Until then the project takes no other action or deploy, and Service.state is still what it was before. Absent = none."
+        },
+        "services": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:Service"
+          },
+          "description": "By name."
+        },
+        "snapshotCount": {
+          "type": "integer",
+          "description": "The project's, in all; see snapshotListTime."
+        },
+        "snapshotListTime": {
+          "type": "string",
+          "description": "When the machine read the list of snapshots that snapshotCount, Volume.snapshotCount and Volume.lastBackupTime come from (Machine.snapshotListTime, as sampled with them). Absent = the list is not known: backups are off, or it is not read yet (Machine.snapshotListFailureMessage says why); a count of 0 then does not mean none."
+        },
+        "snapshots": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:Snapshot"
+          },
+          "description": "The newest 10, newest first, of those GetProjectRequest's snapshotsBefore and snapshotsVolume select. Empty while backups are off or the list is not read yet (snapshotListTime)."
+        },
+        "source": {
+          "$ref": "#/types/pethost:index:ProjectSource",
+          "description": "Set = a GitHub project: {github: {repository}}. Absent = the files of this request.\n\nChanging it replaces the project: Pulumi deletes it first, and what it held goes with it.",
+          "willReplaceOnChanges": true
+        },
+        "timeoutSeconds": {
+          "type": "integer",
+          "description": "As DeployProject's timeoutSeconds.\n\nA change is sent with DeployProject: For the whole deploy, builds included; 0 = default."
+        },
+        "uptimeDays": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:UptimeDay"
+          },
+          "description": "Oldest first, GetProjectRequest.uptimeDayCount of them, today's last."
+        },
+        "url": {
+          "type": "string",
+          "description": "As in ProjectSummary."
+        },
+        "volumes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:Volume"
+          },
+          "description": "Every one the machine holds for the project, by name."
+        },
+        "xPethost": {
+          "$ref": "#/types/pethost:index:ProjectExtension",
+          "description": "Changes to the files' x-pethost: the name people see, the routes, a password.\n\nA change is sent with DeployProject: Edits x-pethost by part, after `files`: metadata by key; routes all at once."
+        },
+        "xPethostAppliesAtOnce": {
+          "type": "boolean",
+          "description": "True = the current deploy succeeded and every service has a container, so a deploy whose files differ only inside `x-pethost` (or not at all) applies at once, with no build or pull, and no restart but the one DeployProject names. False = the next deploy runs in full."
+        }
+      },
+      "required": [
+        "projectId"
+      ],
+      "inputProperties": {
+        "files": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:FileChange"
+          },
+          "description": "The project's files, e.g. [{path: \"/compose.yaml\", text: \"…\"}, {path: \"/.env\", text: \"…\"}], or those to write over the archive's or the commit's. A github source takes only /.env.\n\nA change is sent with DeployProject, with the edits its last value lacks (the others were made): Written in order over the current files, or over the new version's: e.g. [{path: \"/.env\", text: \"…\"}] writes that file whole, and the files not named stay. With no new version pethost.compose.yaml is refused: write /compose.yaml. github: only /.env. None = redeploy."
+        },
+        "linkDatabases": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:DatabaseLinkRequest"
+          },
+          "description": "Changing it replaces the project: Pulumi deletes it first, and what it held goes with it.",
+          "willReplaceOnChanges": true
+        },
+        "projectId": {
+          "type": "string",
+          "description": "New, [a-z0-9][a-z0-9_-]*, ≤63 chars; immutable.\n\nChanging it replaces the project: Pulumi deletes it first, and what it held goes with it.",
+          "willReplaceOnChanges": true
+        },
+        "source": {
+          "$ref": "#/types/pethost:index:ProjectSource",
+          "description": "Set = a GitHub project: {github: {repository}}. Absent = the files of this request.\n\nChanging it replaces the project: Pulumi deletes it first, and what it held goes with it.",
+          "willReplaceOnChanges": true
+        },
+        "timeoutSeconds": {
+          "type": "integer",
+          "description": "As DeployProject's timeoutSeconds.\n\nA change is sent with DeployProject: For the whole deploy, builds included; 0 = default."
+        },
+        "xPethost": {
+          "$ref": "#/types/pethost:index:ProjectExtension",
+          "description": "Changes to the files' x-pethost: the name people see, the routes, a password.\n\nA change is sent with DeployProject: Edits x-pethost by part, after `files`: metadata by key; routes all at once."
+        }
+      },
+      "requiredInputs": [
+        "projectId"
+      ]
+    }
+  },
+  "functions": {
+    "pethost:index:getMachine": {
+      "description": "Start here: the machine (resources, the person's domain, backups, SSH), every project with its problems and URL, deleted projects with snapshots, GitHub repositories to create projects from. Figures are the latest sample; disk sizes and the day's traffic lag a few minutes.",
+      "outputs": {
+        "properties": {
+          "deletedProjects": {
+            "type": "array",
+            "items": {
+              "$ref": "#/types/pethost:index:DeletedProject"
+            },
+            "description": "Projects no longer on the machine whose snapshots remain, the most recently backed up first; restore one with RunProjectAction.restoreSnapshot and its projectId. Current after the machine's own backups and deletes; changes made to the backup repository elsewhere show later. Not known while Machine.snapshotListTime is absent."
+          },
+          "github": {
+            "$ref": "#/types/pethost:index:GithubConnection",
+            "description": "The panel's GitHub App, one for every account: projects are created from the repositories of the account's own installations of it."
+          },
+          "machine": {
+            "$ref": "#/types/pethost:index:Machine"
+          },
+          "projects": {
+            "type": "array",
+            "items": {
+              "$ref": "#/types/pethost:index:ProjectSummary"
+            },
+            "description": "By projectId."
+          }
+        }
+      }
+    },
+    "pethost:index:getOperation": {
+      "description": "An operation, after waiting for it to end (waitSeconds): then the project as it is, and the log's end if it FAILED. Call again while it is IN_PROGRESS. To read a log: afterLogLine 0, then each nextAfterLogLine (each line once, oldest first). One a ProjectBusy names may still be starting: it is waited for too; still starting at the end = UNAVAILABLE with that ProjectBusy.",
+      "inputs": {
+        "properties": {
+          "afterLogLine": {
+            "type": "integer",
+            "description": "The previous nextAfterLogLine; 0 = from the start. Absent = the last lines."
+          },
+          "logLineLimit": {
+            "type": "integer",
+            "description": "≤500; 0 = 50, when asked for lines. Also ends at ~64 KiB."
+          },
+          "operationId": {
+            "type": "string",
+            "description": "Empty = the latest."
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "waitSeconds": {
+            "type": "integer",
+            "description": "How long to wait for it to end, ≤45. Absent = 45; 0 = answer at once."
+          }
+        }
+      },
+      "outputs": {
+        "properties": {
+          "log": {
+            "type": "array",
+            "items": {
+              "$ref": "#/types/pethost:index:OperationLogLine"
+            },
+            "description": "Oldest first. Unless afterLogLine or logLineLimit asks for lines: the last 50 of one that FAILED, the last 5 of one IN_PROGRESS (what it is doing), none of one that SUCCEEDED."
+          },
+          "logLineCount": {
+            "type": "integer",
+            "description": "Lines in the whole log so far."
+          },
+          "nextAfterLogLine": {
+            "type": "integer",
+            "description": "Pass it as afterLogLine to get the lines after these; absent = 0. The machine keeps every line of the log."
+          },
+          "operation": {
+            "$ref": "#/types/pethost:index:Operation"
+          },
+          "project": {
+            "$ref": "#/types/pethost:index:Project",
+            "description": "Once it ended, however it did: the project as GetProject returns it. Absent once a delete has deleted it."
+          }
+        }
+      }
+    },
+    "pethost:index:getProject": {
+      "description": "One project in full: services (state, health, image, the ports it listens on, volumes, environment, the SSH command), volumes, routes, hosts with certificates, recent operations, snapshots, the last day's HTTP traffic. Env-file values and a database's password (Project.database.connection) only with includeSecretValues. Its files: ReadPath.",
+      "inputs": {
+        "properties": {
+          "incidentsBefore": {
+            "type": "string",
+            "description": "Only incidents that opened before it: the oldest openTime seen, to page back. Absent = the newest."
+          },
+          "incidentsBeforeId": {
+            "type": "string",
+            "description": "With incidentsBefore: the incidentId of the oldest seen, so that those that opened at the same time are not skipped."
+          },
+          "includeSecretValues": {
+            "type": "boolean",
+            "description": "True = include env-file values (EnvironmentVariable.secret) and a database's password (Project.database.connection). To edit .env: ReadPath /.env."
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "snapshotsBefore": {
+            "type": "string",
+            "description": "Only older snapshots: the oldest createTime seen, to page back. Absent = the newest."
+          },
+          "snapshotsVolume": {
+            "type": "string",
+            "description": "Only snapshots holding this volume (Volume.snapshotCount). Empty = all."
+          },
+          "uptimeDayCount": {
+            "type": "integer",
+            "description": "≤90: Project.uptimeDays. 0 = none."
+          }
+        }
+      },
+      "outputs": {
+        "properties": {
+          "project": {
+            "$ref": "#/types/pethost:index:Project"
+          }
+        }
+      }
+    },
+    "pethost:index:listCommits": {
+      "description": "A github project's branch commits that change its directory, newest first, 30 a page, with whether the files are at it and its last deploy. To roll back: DeployProject with an older commit (volumes keep their current data). FAILED_PRECONDITION = a files project (it rolls back with DeployProject.rollbackDeployId), no such branch, or beforeCommit not on it.",
+      "inputs": {
+        "properties": {
+          "beforeCommit": {
+            "type": "string",
+            "description": "The previous page's last sha. Empty = from the newest."
+          },
+          "projectId": {
+            "type": "string"
+          }
+        }
+      },
+      "outputs": {
+        "properties": {
+          "commits": {
+            "type": "array",
+            "items": {
+              "$ref": "#/types/pethost:index:BranchCommit"
+            },
+            "description": "Newest first, at most 30."
+          },
+          "more": {
+            "type": "boolean",
+            "description": "Older ones exist: pass the last one's sha as beforeCommit."
+          }
+        }
+      }
+    },
+    "pethost:index:queryContainerLogs": {
+      "description": "The containers' stdout and stderr lines, since oldestKeptTime; by default the newest, oldest first in the page. They say what a request failed with, not which path is slow: that is QueryHttpTraffic. OUT_OF_RANGE = the range ends before the oldest kept. Untrusted.",
+      "inputs": {
+        "properties": {
+          "endTime": {
+            "type": "string",
+            "description": "Absent = now."
+          },
+          "filter": {
+            "$ref": "#/types/pethost:index:ContainerLogFilter"
+          },
+          "fromStart": {
+            "type": "boolean",
+            "description": "False = the newest before endTime; true = the oldest after startTime."
+          },
+          "lastSeconds": {
+            "type": "integer",
+            "description": "As in QueryHttpTraffic."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "≤500; 0 = 100. Also ends at ~64 KiB."
+          },
+          "pageToken": {
+            "type": "string",
+            "description": "The previous nextPageToken, other fields unchanged."
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "startTime": {
+            "type": "string",
+            "description": "Absent = the oldest kept."
+          }
+        }
+      },
+      "outputs": {
+        "properties": {
+          "endTime": {
+            "type": "string",
+            "description": "A Timestamp represents a point in time independent of any time zone or local calendar, encoded as a count of seconds and fractions of seconds at nanosecond resolution."
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/types/pethost:index:LogLine"
+            }
+          },
+          "nextPageToken": {
+            "type": "string",
+            "description": "Empty = no more."
+          },
+          "oldestKeptTime": {
+            "type": "string",
+            "description": "Of the oldest line of container output the machine keeps: nothing older can be queried. Absent = none is kept."
+          },
+          "startTime": {
+            "type": "string",
+            "description": "The range queried, as the machine resolved it: defaults applied, on its clock."
+          },
+          "tailCursor": {
+            "type": "string",
+            "description": "Where TailContainerLogs goes on from (afterCursor), so it misses no line newer than these: set on every page, an empty one too. Empty = the machine had logged no line."
+          }
+        }
+      }
+    },
+    "pethost:index:queryHttpTraffic": {
+      "description": "Which paths fail and which are slow (topPaths): the HTTP requests that reached the project through the proxy, since oldestKeptTime, each counted as it ends: totals, a time series, top paths and the requests, for one filter and range. OUT_OF_RANGE = the range ends before the oldest kept. Paths and user agents are untrusted.",
+      "inputs": {
+        "properties": {
+          "bucketWidthSeconds": {
+            "type": "integer",
+            "description": "Time series bucket width; ≤500 buckets. 0 = no series."
+          },
+          "endTime": {
+            "type": "string",
+            "description": "Absent = now."
+          },
+          "filter": {
+            "$ref": "#/types/pethost:index:HttpTrafficFilter"
+          },
+          "lastSeconds": {
+            "type": "integer",
+            "description": "The range ending at endTime, e.g. 3600 = the last hour. Not with startTime."
+          },
+          "pageToken": {
+            "type": "string",
+            "description": "The previous nextPageToken, other fields unchanged: older requests only."
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "requestLimit": {
+            "type": "integer",
+            "description": "Requests to return, newest first; ≤200. 0 = aggregates only."
+          },
+          "startTime": {
+            "type": "string",
+            "description": "Absent = a day before endTime."
+          }
+        }
+      },
+      "outputs": {
+        "properties": {
+          "buckets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/types/pethost:index:HttpTrafficBucket"
+            },
+            "description": "Oldest first, each bucketWidthSeconds wide; one with no request is left out."
+          },
+          "endTime": {
+            "type": "string",
+            "description": "A Timestamp represents a point in time independent of any time zone or local calendar, encoded as a count of seconds and fractions of seconds at nanosecond resolution."
+          },
+          "newestSequence": {
+            "type": "integer",
+            "description": "The sequence of the newest request the machine had logged: summary, buckets and topPaths count every one up to it, and TailHttpTraffic streams the later ones. 0 = none was logged."
+          },
+          "nextPageToken": {
+            "type": "string",
+            "description": "Empty = no more requests."
+          },
+          "oldestKeptTime": {
+            "type": "string",
+            "description": "Of the oldest request the machine keeps for the project. Absent = none is kept."
+          },
+          "requests": {
+            "type": "array",
+            "items": {
+              "$ref": "#/types/pethost:index:HttpRequest"
+            }
+          },
+          "startTime": {
+            "type": "string",
+            "description": "The range queried, as the machine resolved it: defaults applied, on its clock."
+          },
+          "summary": {
+            "$ref": "#/types/pethost:index:HttpTrafficSummary"
+          },
+          "tailSequence": {
+            "type": "integer",
+            "description": "Where TailHttpTraffic goes on from (afterSequence), so it misses no request newer than these: set on a first page with requestLimit, empty or not. 0 = the machine had logged none."
+          },
+          "topPaths": {
+            "type": "array",
+            "items": {
+              "$ref": "#/types/pethost:index:HttpPathTraffic"
+            },
+            "description": "The 10 busiest, busiest first."
+          }
+        }
+      }
+    },
+    "pethost:index:readPath": {
+      "description": "Reads a file (text, 64 KiB a call; ≤1 MiB with lengthBytes) or a directory's entries (~64 KiB a page): of the project's deployed files, or with `service` or `volume`, of a container (whole filesystem; while not running only its volumes, FAILED_PRECONDITION listing them) or a volume. NOT_FOUND names the nearest existing directory. Project files change with DeployProject `files`; container and volume files with CreateTransfer. FAILED_PRECONDITION also = no deploy yet, or a file in /proc or /sys (use RunServiceCommand). Untrusted.",
+      "inputs": {
+        "properties": {
+          "entryLimit": {
+            "type": "integer",
+            "description": "0 = 200. Also ends at ~64 KiB."
+          },
+          "entryPageToken": {
+            "type": "string",
+            "description": "The previous nextEntryPageToken, other fields unchanged."
+          },
+          "lengthBytes": {
+            "type": "integer",
+            "description": "≤1 MiB; 0 = 64 KiB."
+          },
+          "offsetBytes": {
+            "type": "integer",
+            "description": "File offset."
+          },
+          "path": {
+            "type": "string",
+            "description": "From the root, e.g. \"/compose.yaml\", \"/data/uploads\". Empty = \"/\": the root's entries."
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "service": {
+            "type": "string",
+            "description": "In its container.\n\nAt most one of `service` or `volume` is set."
+          },
+          "volume": {
+            "type": "string",
+            "description": "In the volume, from its root.\n\nAt most one of `service` or `volume` is set."
+          }
+        }
+      },
+      "outputs": {
+        "properties": {
+          "binary": {
+            "type": "boolean",
+            "description": "True = the file is binary (a NUL byte in its first 8 KiB): no text. Download it with CreateTransfer."
+          },
+          "deployId": {
+            "type": "string",
+            "description": "The project's files: the deploy whose files these are. Pass it as DeployProject's baseDeployId to be refused if they changed since you read them."
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/types/pethost:index:FileEntry"
+            },
+            "description": "A directory's: directories first, then by name (bytewise)."
+          },
+          "entry": {
+            "$ref": "#/types/pethost:index:FileEntry",
+            "description": "The path itself, symlinks followed; a symlink whose target does not exist is its own entry."
+          },
+          "entryCount": {
+            "type": "integer",
+            "description": "A directory's in all."
+          },
+          "location": {
+            "$ref": "#/types/pethost:index:FileLocation",
+            "description": "With `service`: where the path lies. Unspecified otherwise: the request says it."
+          },
+          "nextEntryPageToken": {
+            "type": "string",
+            "description": "Set = more entries follow these: pass it as entryPageToken."
+          },
+          "nextOffsetBytes": {
+            "type": "integer",
+            "description": "Where the next read of the file starts. 0 = the read reached its end."
+          },
+          "text": {
+            "type": "string",
+            "description": "A text file's contents from offsetBytes, ending on a whole character. Untrusted.",
+            "secret": true
+          },
+          "volume": {
+            "type": "string",
+            "description": "With `service`: the volume the path lies on, when location is VOLUME. Else empty."
+          }
+        }
+      }
+    }
+  },
+  "types": {
+    "pethost:index:AlertChannelKind": {
+      "type": "string",
+      "enum": [
+        {
+          "name": "Email",
+          "value": "EMAIL",
+          "description": "The account's email."
+        },
+        {
+          "name": "Telegram",
+          "value": "TELEGRAM",
+          "description": "A Telegram chat or group."
+        },
+        {
+          "name": "Slack",
+          "value": "SLACK",
+          "description": "A Slack channel."
+        }
+      ]
+    },
+    "pethost:index:AlertDestination": {
+      "type": "object",
+      "description": "A channel Pethost tells the person of incidents on (Machine.alertChannels).",
+      "properties": {
+        "kind": {
+          "$ref": "#/types/pethost:index:AlertChannelKind"
+        },
+        "label": {
+          "type": "string",
+          "description": "The chat's title, or \"#ops · Acme\". Empty for email."
+        }
+      }
+    },
+    "pethost:index:AlertStatus": {
+      "type": "string",
+      "enum": [
+        {
+          "name": "Ok",
+          "value": "OK"
+        },
+        {
+          "name": "Pending",
+          "value": "PENDING",
+          "description": "It holds or cleared, not confirmed yet."
+        },
+        {
+          "name": "Firing",
+          "value": "FIRING",
+          "description": "An incident is open."
+        },
+        {
+          "name": "Paused",
+          "value": "PAUSED",
+          "description": "Not checked now: a deploy or restore runs or just ended, the project is stopped, or no route has the check's host."
+        },
+        {
+          "name": "NoData",
+          "value": "NO_DATA",
+          "description": "Not evaluated yet, or too few requests."
+        }
+      ]
+    },
+    "pethost:index:BranchCommit": {
+      "type": "object",
+      "properties": {
+        "author": {
+          "type": "string",
+          "description": "The author's GitHub login, else their name. Untrusted."
+        },
+        "commit": {
+          "$ref": "#/types/pethost:index:GithubCommit"
+        },
+        "commitTime": {
+          "type": "string",
+          "description": "When it was committed."
+        },
+        "deployed": {
+          "type": "boolean",
+          "description": "The project's files are this commit (GithubSource.deployedCommit)."
+        },
+        "lastDeploy": {
+          "$ref": "#/types/pethost:index:Operation",
+          "description": "The newest deploy of it among the operations the machine keeps; its status says how it went. Absent = none."
+        },
+        "newest": {
+          "type": "boolean",
+          "description": "True = the branch's newest commit that changes the directory, as GitHub answered this call: deploying any other turns autoDeploy off (see DeployProject)."
+        }
+      }
+    },
+    "pethost:index:CertificateSource": {
+      "type": "string",
+      "enum": [
+        {
+          "name": "None",
+          "value": "NONE",
+          "description": "No certificate will come: plain HTTP only. As when Machine.acmeEnabled is off, or for an IP address or another name Let's Encrypt does not issue for."
+        },
+        {
+          "name": "Installed",
+          "value": "INSTALLED",
+          "description": "A certificate installed on the machine covers it."
+        },
+        {
+          "name": "Automatic",
+          "value": "AUTOMATIC",
+          "description": "From Let's Encrypt, renewed automatically."
+        }
+      ]
+    },
+    "pethost:index:ContainerLogFilter": {
+      "type": "object",
+      "properties": {
+        "service": {
+          "type": "string",
+          "description": "Empty = all, removed services too."
+        },
+        "stream": {
+          "$ref": "#/types/pethost:index:OutputStream",
+          "description": "Absent = both."
+        },
+        "textContains": {
+          "type": "string",
+          "description": "Literal, any ASCII case, ignoring escape sequences. Length limited (INVALID_ARGUMENT)."
+        }
+      }
+    },
+    "pethost:index:Database": {
+      "type": "object",
+      "description": "A database project: one service running Postgres, MariaDB or Valkey, whose files the machine wrote.",
+      "properties": {
+        "connection": {
+          "$ref": "#/types/pethost:index:DatabaseConnection",
+          "description": "How a linked project signs in, as the apps' user."
+        },
+        "connections": {
+          "type": "integer",
+          "description": "Open now."
+        },
+        "consoleCommand": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The console, for OpenTerminal in `service`: psql or mariadb signed in as the superuser, or valkey-cli."
+        },
+        "dataBytes": {
+          "type": "integer",
+          "description": "Postgres, MariaDB: its databases' size; Valkey: its data in memory. On disk: Project.volumes."
+        },
+        "engine": {
+          "$ref": "#/types/pethost:index:DatabaseEngine"
+        },
+        "linkedProjects": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The projects that reach it: CreateProject's linkDatabases or LinkDatabase linked them. Each signs in as the apps' user (connection), but those of ownUserProjects."
+        },
+        "majorVersion": {
+          "type": "integer",
+          "description": "As it was made, e.g. 18."
+        },
+        "maxConnections": {
+          "type": "integer",
+          "description": "Valkey: maxclients."
+        },
+        "memoryLimitBytes": {
+          "type": "integer",
+          "description": "Its size: its service's `mem_limit` in compose.yaml. RunProjectAction.setDatabaseSize changes it."
+        },
+        "ownUserProjects": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Of linkedProjects, those linked with ownUser (DatabaseLinkRequest): each signs in as a user of its own, to a database of its own, both named as it, with the password in its /.env. The others sign in as the apps' user, `app` (a Valkey's `default`), whether linkDatabases or LinkDatabase linked them; only linkDatabases wrote how into an app's /.env."
+        },
+        "serverVersion": {
+          "type": "string",
+          "description": "What the server says it runs, e.g. \"18.6\". Empty = not answering."
+        },
+        "service": {
+          "type": "string",
+          "description": "The service of Project.services that runs the database."
+        },
+        "volume": {
+          "type": "string",
+          "description": "The volume of Project.volumes that holds its data."
+        }
+      }
+    },
+    "pethost:index:DatabaseConnection": {
+      "type": "object",
+      "description": "How a linked project signs in, as the apps' user.",
+      "properties": {
+        "database": {
+          "type": "string",
+          "description": "\"app\"; Valkey: \"0\"."
+        },
+        "host": {
+          "type": "string",
+          "description": "The database's projectId."
+        },
+        "localUrl": {
+          "type": "string",
+          "description": "As url, at localhost (MariaDB's at 127.0.0.1, which a MySQL client does not take for its socket): what the SSH tunnel to its service gives (Service.sshCommand).",
+          "secret": true
+        },
+        "password": {
+          "type": "string",
+          "description": "Only with GetProject's includeSecretValues.",
+          "secret": true
+        },
+        "port": {
+          "type": "integer"
+        },
+        "url": {
+          "type": "string",
+          "description": "For the app's .env, e.g. DATABASE_URL=\\\u003curl\u003e. Without includeSecretValues, **** stands for the password.",
+          "secret": true
+        },
+        "user": {
+          "type": "string",
+          "description": "\"app\"; Valkey: \"default\"."
+        }
+      }
+    },
+    "pethost:index:DatabaseEngine": {
+      "type": "string",
+      "enum": [
+        {
+          "name": "Postgres",
+          "value": "POSTGRES"
+        },
+        {
+          "name": "Valkey",
+          "value": "VALKEY"
+        },
+        {
+          "name": "Mariadb",
+          "value": "MARIADB",
+          "description": "MySQL's protocol: for an app that asks for MySQL or MariaDB."
+        }
+      ]
+    },
+    "pethost:index:DatabaseEngineOffer": {
+      "type": "object",
+      "description": "An engine the machine makes databases of (Machine.databaseEngines).",
+      "properties": {
+        "defaultMemoryLimitBytes": {
+          "type": "integer",
+          "description": "The size CreateDatabase gives when its memoryLimitBytes is 0, unless it copies a snapshot."
+        },
+        "engine": {
+          "$ref": "#/types/pethost:index:DatabaseEngine"
+        },
+        "majorVersion": {
+          "type": "integer",
+          "description": "The major a new database gets, e.g. 18."
+        },
+        "ownUsers": {
+          "type": "boolean",
+          "description": "A project linked with ownUser (DatabaseLinkRequest) gets a user and a database of its own in one of its databases, so several apps can share one. False = every app signs in as its one user, and ownUser is refused (ONE_USER)."
+        },
+        "sizes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:DatabaseSizeChoice"
+          },
+          "description": "Smallest first."
+        }
+      }
+    },
+    "pethost:index:DatabaseLinkRequest": {
+      "type": "object",
+      "properties": {
+        "databaseProjectId": {
+          "type": "string"
+        },
+        "envPrefix": {
+          "type": "string"
+        },
+        "ownUser": {
+          "type": "boolean"
+        }
+      }
+    },
+    "pethost:index:DatabaseSizeChoice": {
+      "type": "object",
+      "description": "A size a database may take.",
+      "properties": {
+        "memoryLimitBytes": {
+          "type": "integer"
+        }
+      }
+    },
+    "pethost:index:DatabaseSummary": {
+      "type": "object",
+      "description": "A database project in brief (ProjectSummary.database).",
+      "properties": {
+        "connections": {
+          "type": "integer"
+        },
+        "dataBytes": {
+          "type": "integer",
+          "description": "As in Database."
+        },
+        "engine": {
+          "$ref": "#/types/pethost:index:DatabaseEngine"
+        },
+        "linkedProjects": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "As in Database: all but ownUserProjects sign in as the apps' user."
+        },
+        "majorVersion": {
+          "type": "integer"
+        },
+        "memoryLimitBytes": {
+          "type": "integer",
+          "description": "Its size, as in Database."
+        },
+        "ownUserProjects": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Of linkedProjects, those with ownUser, as in Database."
+        },
+        "serverVersion": {
+          "type": "string",
+          "description": "As in Database: empty = not answering, its figures are zero."
+        }
+      }
+    },
+    "pethost:index:DeletedProject": {
+      "type": "object",
+      "properties": {
+        "newestSnapshot": {
+          "$ref": "#/types/pethost:index:Snapshot",
+          "description": "Restore it to bring the project back as it was last backed up; GetProject then pages the older ones (snapshotsBefore)."
+        },
+        "projectId": {
+          "type": "string"
+        },
+        "snapshotCount": {
+          "type": "integer",
+          "description": "In all."
+        }
+      }
+    },
+    "pethost:index:DeployFailureReason": {
+      "type": "string",
+      "enum": [
+        {
+          "name": "ImagePullFailed",
+          "value": "IMAGE_PULL_FAILED",
+          "description": "A wrong name or tag, or a private image."
+        },
+        {
+          "name": "ImageBuildFailed",
+          "value": "IMAGE_BUILD_FAILED"
+        },
+        {
+          "name": "ContainerStartFailed",
+          "value": "CONTAINER_START_FAILED",
+          "description": "E.g. the command does not exist."
+        },
+        {
+          "name": "DiskFull",
+          "value": "DISK_FULL"
+        },
+        {
+          "name": "Internal",
+          "value": "INTERNAL",
+          "description": "Includes a machine restart during the operation."
+        },
+        {
+          "name": "PortUnavailable",
+          "value": "PORT_UNAVAILABLE",
+          "description": "A `ports:` machine port is taken."
+        },
+        {
+          "name": "ContainerExited",
+          "value": "CONTAINER_EXITED",
+          "description": "Exited, or kept restarting, after starting."
+        },
+        {
+          "name": "ContainerUnhealthy",
+          "value": "CONTAINER_UNHEALTHY"
+        },
+        {
+          "name": "TimedOut",
+          "value": "TIMED_OUT"
+        },
+        {
+          "name": "UncoveredImageVolume",
+          "value": "UNCOVERED_IMAGE_VOLUME",
+          "description": "The image declares a VOLUME no mount covers: it would never be backed up. Mount a named volume there."
+        },
+        {
+          "name": "BuildMemoryUnavailable",
+          "value": "BUILD_MEMORY_UNAVAILABLE",
+          "description": "The running projects leave too little memory for a build; the message says how much."
+        },
+        {
+          "name": "DatabaseUserFailed",
+          "value": "DATABASE_USER_FAILED",
+          "description": "Its user of its own in a linked database (DatabaseLinkRequest.ownUser) could not be made: the database does not run or answer, or refused; the message says which. Start it, then deploy again."
+        }
+      ]
+    },
+    "pethost:index:DiskUsage": {
+      "type": "object",
+      "description": "Where the disk goes; the rest of diskUsedBytes is the filesystem's own metadata and the machine's small files. Measured every few minutes.",
+      "properties": {
+        "buildCacheBytes": {
+          "type": "integer",
+          "description": "Absent = not known: Docker cannot size the build cache."
+        },
+        "containerLayersBytes": {
+          "type": "integer",
+          "description": "What containers wrote outside volumes."
+        },
+        "containerLogsBytes": {
+          "type": "integer",
+          "description": "Kept on the operating system's partition, outside diskUsedBytes; the machine bounds their age and size (QueryContainerLogsResponse.oldestKeptTime)."
+        },
+        "httpTrafficBytes": {
+          "type": "integer",
+          "description": "The HTTP request log."
+        },
+        "imagesBytes": {
+          "type": "integer"
+        },
+        "projectFilesBytes": {
+          "type": "integer",
+          "description": "Project directories and operation logs."
+        },
+        "volumesBytes": {
+          "type": "integer"
+        }
+      }
+    },
+    "pethost:index:EnvironmentVariable": {
+      "type": "object",
+      "properties": {
+        "fromEnvFileVariables": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "When compose.yaml builds it from `${...}`: the .env variables to edit to change it."
+        },
+        "name": {
+          "type": "string"
+        },
+        "secret": {
+          "type": "boolean",
+          "description": "True = its value is not empty and comes from an env file, directly or through `${...}` in compose.yaml: env files hold the secrets. Empty values, and values written in compose.yaml itself, are not secret. The machine hides these values in operation logs too."
+        },
+        "sourceFile": {
+          "type": "string",
+          "description": "The file to edit to change it, absolute in the project's directory: \"/compose.yaml\" (the service's `environment:`, which wins) or the env file it comes from, e.g. \"/.env\", \"/web.env\". Empty = the machine cannot tell, as when compose.yaml takes that file's path from .env."
+        },
+        "value": {
+          "type": "string",
+          "description": "Absent when empty, when `secret` and GetProject had no includeSecretValues, or when valueLeftOut.",
+          "secret": true
+        },
+        "valueLeftOut": {
+          "type": "boolean",
+          "description": "True = the value is left out: the project's values together hold more than about 64 KiB. Read sourceFile with ReadPath."
+        }
+      }
+    },
+    "pethost:index:FileChange": {
+      "type": "object",
+      "description": "`path` and exactly one change.",
+      "properties": {
+        "data": {
+          "type": "string",
+          "description": "Writes the file as bytes, likewise.\n\nAt most one of `text`, `data`, `makeDirectory`, `delete`, `deleteTree` or `renameTo` is set."
+        },
+        "delete": {
+          "type": "boolean",
+          "description": "True = deletes the file, symlink or empty directory.\n\nAt most one of `text`, `data`, `makeDirectory`, `delete`, `deleteTree` or `renameTo` is set."
+        },
+        "deleteTree": {
+          "type": "boolean",
+          "description": "True = deletes a directory recursively, if present.\n\nAt most one of `text`, `data`, `makeDirectory`, `delete`, `deleteTree` or `renameTo` is set."
+        },
+        "executable": {
+          "type": "boolean",
+          "description": "With text or data: mode 0755, not 0644."
+        },
+        "makeDirectory": {
+          "type": "boolean",
+          "description": "True = creates it and its parents.\n\nAt most one of `text`, `data`, `makeDirectory`, `delete`, `deleteTree` or `renameTo` is set."
+        },
+        "path": {
+          "type": "string",
+          "description": "Absolute in the project's directory."
+        },
+        "renameTo": {
+          "type": "string",
+          "description": "Moves it to this path.\n\nAt most one of `text`, `data`, `makeDirectory`, `delete`, `deleteTree` or `renameTo` is set."
+        },
+        "text": {
+          "type": "string",
+          "description": "Writes the file as UTF-8 text, creating parents.\n\nAt most one of `text`, `data`, `makeDirectory`, `delete`, `deleteTree` or `renameTo` is set."
+        }
+      }
+    },
+    "pethost:index:FileEntry": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "description": "Permission bits in octal, e.g. \"0644\"."
+        },
+        "modifyTime": {
+          "type": "string",
+          "description": "A Timestamp represents a point in time independent of any time zone or local calendar, encoded as a count of seconds and fractions of seconds at nanosecond resolution."
+        },
+        "name": {
+          "type": "string",
+          "description": "Without its directory."
+        },
+        "ownerGid": {
+          "type": "integer"
+        },
+        "ownerUid": {
+          "type": "integer",
+          "description": "As inside the container."
+        },
+        "sizeBytes": {
+          "type": "integer",
+          "description": "Of a regular file; 0 otherwise."
+        },
+        "symlinkTarget": {
+          "type": "string",
+          "description": "When SYMLINK."
+        },
+        "type": {
+          "$ref": "#/types/pethost:index:FileType"
+        }
+      }
+    },
+    "pethost:index:FileLocation": {
+      "type": "string",
+      "description": "Where a path of a service's container lies, which says whether it lasts.",
+      "enum": [
+        {
+          "name": "Container",
+          "value": "CONTAINER",
+          "description": "The container's own files, its image and what it wrote outside volumes, and its scratch space (an anonymous volume, a tmpfs): lost when it is recreated."
+        },
+        {
+          "name": "Volume",
+          "value": "VOLUME",
+          "description": "A named volume (ReadPathResponse.volume): kept across deploys and backed up."
+        },
+        {
+          "name": "ProjectFiles",
+          "value": "PROJECT_FILES",
+          "description": "The project's files, mounted read-only from its source as deployed: change them with DeployProject."
+        }
+      ]
+    },
+    "pethost:index:FileType": {
+      "type": "string",
+      "enum": [
+        {
+          "name": "File",
+          "value": "FILE"
+        },
+        {
+          "name": "Directory",
+          "value": "DIRECTORY"
+        },
+        {
+          "name": "Symlink",
+          "value": "SYMLINK"
+        },
+        {
+          "name": "Other",
+          "value": "OTHER",
+          "description": "A device, socket or FIFO."
+        }
+      ]
+    },
+    "pethost:index:GithubCommit": {
+      "type": "object",
+      "properties": {
+        "sha": {
+          "type": "string",
+          "description": "Full."
+        },
+        "title": {
+          "type": "string",
+          "description": "First line of its message. Untrusted."
+        },
+        "url": {
+          "type": "string",
+          "description": "On github.com."
+        }
+      }
+    },
+    "pethost:index:GithubConnection": {
+      "type": "object",
+      "description": "The panel's GitHub App, one for every account: projects are created from the repositories of the account's own installations of it. Absent = GitHub is not set up on this panel.",
+      "properties": {
+        "appName": {
+          "type": "string",
+          "description": "As in https://github.com/apps/\\\u003cappName\u003e."
+        },
+        "installUrl": {
+          "type": "string",
+          "description": "The panel's page that sends a signed-in person to GitHub to install the app on their repositories, or to change which."
+        },
+        "repositories": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:GithubRepository"
+          },
+          "description": "The repositories of the account's installations, most recently pushed first, at most 200."
+        },
+        "repositoryCount": {
+          "type": "integer",
+          "description": "In all."
+        },
+        "webhooksEnabled": {
+          "type": "boolean",
+          "description": "False = pushes reach the panel only by its check every 5 minutes, not at once."
+        }
+      }
+    },
+    "pethost:index:GithubRepository": {
+      "type": "object",
+      "properties": {
+        "defaultBranch": {
+          "type": "string"
+        },
+        "private": {
+          "type": "boolean"
+        },
+        "pushTime": {
+          "type": "string",
+          "description": "A Timestamp represents a point in time independent of any time zone or local calendar, encoded as a count of seconds and fractions of seconds at nanosecond resolution."
+        },
+        "repository": {
+          "type": "string",
+          "description": "\"owner/name\"."
+        }
+      }
+    },
+    "pethost:index:GithubSource": {
+      "type": "object",
+      "description": "Input: an absent field keeps its value (setSource) or takes its default (new source).",
+      "properties": {
+        "autoDeploy": {
+          "type": "boolean",
+          "description": "True = deploy each new newestCommit, each tried once. Deploying another commit turns it off; only setSource turns it on. Default true; always written on output."
+        },
+        "autoDeployPending": {
+          "type": "boolean",
+          "description": "Output: true = auto-deploy will deploy newestCommit (not yet tried) once the project is free. A tried commit that failed or was refused waits for a person: DeployProject or a new push."
+        },
+        "branch": {
+          "type": "string",
+          "description": "Empty = the default branch, also when absent on a new source."
+        },
+        "deployedCommit": {
+          "$ref": "#/types/pethost:index:GithubCommit",
+          "description": "Output: the commit the files are at. Absent = no deploy, or the files came from another source."
+        },
+        "directory": {
+          "type": "string",
+          "description": "The project's directory in it, e.g. \"apps/web\"; empty = the root."
+        },
+        "newestCommit": {
+          "$ref": "#/types/pethost:index:GithubCommit",
+          "description": "Output: the branch's newest commit touching the directory, as of the last push or 5-minute check."
+        },
+        "pinned": {
+          "type": "boolean",
+          "description": "Output: deployedCommit set and autoDeploy off, e.g. after a rollback."
+        },
+        "repository": {
+          "type": "string",
+          "description": "\"owner/name\", one of GetMachine.github.repositories."
+        }
+      }
+    },
+    "pethost:index:HealthCheck": {
+      "type": "object",
+      "description": "The healthcheck Docker runs: compose.yaml's, else the image's HEALTHCHECK.",
+      "properties": {
+        "command": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The program and its arguments, e.g. [\"curl\", \"-f\", \"http://localhost:8000/health\"]; a test written as a shell line is [\"/bin/sh\", \"-c\", \\\u003cline\u003e]. Written and known as Service.command is: compose.yaml's `healthcheck.test`, else the image's."
+        },
+        "consecutiveFailureCount": {
+          "type": "integer"
+        },
+        "intervalSeconds": {
+          "type": "integer",
+          "description": "How often Docker runs it."
+        },
+        "lastFailureOutput": {
+          "type": "string",
+          "description": "Of the latest failed check, at most 4 KiB. Untrusted."
+        },
+        "recentResultsPassed": {
+          "type": "array",
+          "items": {
+            "type": "boolean"
+          },
+          "description": "Up to the last 5 checks, oldest first."
+        },
+        "status": {
+          "$ref": "#/types/pethost:index:HealthStatus",
+          "description": "Absent while the service is not running."
+        }
+      }
+    },
+    "pethost:index:HealthStatus": {
+      "type": "string",
+      "enum": [
+        {
+          "name": "Starting",
+          "value": "STARTING"
+        },
+        {
+          "name": "Healthy",
+          "value": "HEALTHY"
+        },
+        {
+          "name": "Unhealthy",
+          "value": "UNHEALTHY"
+        }
+      ]
+    },
+    "pethost:index:Host": {
+      "type": "object",
+      "description": "A host of Project.routes, with its certificate.",
+      "properties": {
+        "certificateExpireTime": {
+          "type": "string",
+          "description": "When the certificate served expires. Absent = none is served yet."
+        },
+        "certificateSource": {
+          "$ref": "#/types/pethost:index:CertificateSource"
+        },
+        "host": {
+          "type": "string",
+          "description": "As x-pethost.routes[].host.",
+          "language": {
+            "csharp": {
+              "name": "HostInfo"
+            }
+          }
+        },
+        "unavailableMessage": {
+          "type": "string",
+          "description": "Why the host answers nobody: a name under the panel's domain that is not one label under Machine.appsDomain (another account's, or two labels deep): change its host. One under a former appsDomain of this account moves by itself to the same name under the new one, within a minute of the change, unless the project's last deploy failed or another project has that name. Empty = it answers, or it is the person's own domain."
+        },
+        "url": {
+          "type": "string",
+          "description": "\"https://\\\u003chost\u003e\" once its certificate is served, and plain HTTP is redirected there; until then \"http://\\\u003chost\u003e\", which reaches the services. For AUTOMATIC, the host must resolve to the machine first. A protected project (Project.passwordProtected) is never served over plain HTTP: it is always redirected, so the host answers only once its certificate is served."
+        }
+      }
+    },
+    "pethost:index:HttpPathTraffic": {
+      "type": "object",
+      "properties": {
+        "method": {
+          "type": "string"
+        },
+        "pathPattern": {
+          "type": "string",
+          "description": "The path with id-like segments as `*`, e.g. \"/recipes/*\": requests to one endpoint."
+        },
+        "summary": {
+          "$ref": "#/types/pethost:index:HttpTrafficSummary"
+        }
+      }
+    },
+    "pethost:index:HttpRequest": {
+      "type": "object",
+      "properties": {
+        "clientIpAddress": {
+          "type": "string"
+        },
+        "durationMs": {
+          "type": "integer",
+          "description": "In total."
+        },
+        "finishTime": {
+          "type": "string",
+          "description": "When the response finished. A WebSocket is logged when it closes, with status 0."
+        },
+        "host": {
+          "type": "string"
+        },
+        "method": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string",
+          "description": "With the query. Untrusted."
+        },
+        "pathPattern": {
+          "type": "string"
+        },
+        "port": {
+          "type": "integer"
+        },
+        "responseSizeBytes": {
+          "type": "integer"
+        },
+        "routePath": {
+          "type": "string",
+          "description": "The route that matched."
+        },
+        "sequence": {
+          "type": "integer",
+          "description": "Unique and increasing on the machine: TailHttpTraffic's cursor."
+        },
+        "service": {
+          "type": "string",
+          "description": "That answered. Empty = of a route the project no longer has."
+        },
+        "serviceDurationMs": {
+          "type": "integer",
+          "description": "Of which inside the service."
+        },
+        "statusCode": {
+          "type": "integer",
+          "description": "0 = a WebSocket; 499 = the client left before the response. A 401, 303 or 429 of a protected project (Project.passwordProtected) may be its password page's, not the service's."
+        },
+        "userAgent": {
+          "type": "string",
+          "description": "Untrusted."
+        }
+      }
+    },
+    "pethost:index:HttpTrafficBucket": {
+      "type": "object",
+      "properties": {
+        "startTime": {
+          "type": "string",
+          "description": "A Timestamp represents a point in time independent of any time zone or local calendar, encoded as a count of seconds and fractions of seconds at nanosecond resolution."
+        },
+        "summary": {
+          "$ref": "#/types/pethost:index:HttpTrafficSummary"
+        }
+      }
+    },
+    "pethost:index:HttpTrafficFilter": {
+      "type": "object",
+      "properties": {
+        "host": {
+          "type": "string",
+          "description": "As Host.host; a removed host still matches."
+        },
+        "method": {
+          "type": "string",
+          "description": "E.g. \"GET\"."
+        },
+        "pathContains": {
+          "type": "string",
+          "description": "Without the query; any case."
+        },
+        "pathPattern": {
+          "type": "string",
+          "description": "As HttpPathTraffic.pathPattern, e.g. \"/recipes/*\"."
+        },
+        "statusClass": {
+          "type": "integer",
+          "description": "1-5: 5 = 5xx."
+        }
+      }
+    },
+    "pethost:index:HttpTrafficSummary": {
+      "type": "object",
+      "properties": {
+        "latencyP50Ms": {
+          "type": "integer",
+          "description": "Of responses: WebSockets, logged when they close, count as requests but not here."
+        },
+        "latencyP95Ms": {
+          "type": "integer"
+        },
+        "requestCount": {
+          "type": "integer"
+        },
+        "serverErrorCount": {
+          "type": "integer",
+          "description": "5xx responses."
+        }
+      }
+    },
+    "pethost:index:Incident": {
+      "type": "object",
+      "description": "A period during which something of a project needed attention, from its confirmation to its end.",
+      "properties": {
+        "afterOperationEndTime": {
+          "type": "string",
+          "description": "Absent = it was running."
+        },
+        "afterOperationId": {
+          "type": "string",
+          "description": "A deploy, recreate or restore that ran when it opened, or ended ≤30 minutes before: a likely cause, undone with DeployProject.rollbackDeployId or an older commit. Empty = none."
+        },
+        "check": {
+          "$ref": "#/types/pethost:index:SiteCheck",
+          "description": "SITE_DOWN."
+        },
+        "evidence": {
+          "$ref": "#/types/pethost:index:IncidentEvidence",
+          "description": "GetIncident only."
+        },
+        "flapping": {
+          "type": "boolean",
+          "description": "True = it went down and up 3 times within an hour; it stands for them all and clears after 15 clean minutes."
+        },
+        "incidentId": {
+          "type": "string"
+        },
+        "incidentMessage": {
+          "type": "string",
+          "description": "One sentence for people, without a time of day."
+        },
+        "joinedIncidentId": {
+          "type": "string",
+          "description": "The incident this one is part of: it is told with that one, not on its own. Empty = none."
+        },
+        "kind": {
+          "$ref": "#/types/pethost:index:ProjectProblemKind",
+          "description": "DEPLOY_CANCELLED opens none."
+        },
+        "openTime": {
+          "type": "string",
+          "description": "A Timestamp represents a point in time independent of any time zone or local calendar, encoded as a count of seconds and fractions of seconds at nanosecond resolution."
+        },
+        "operationId": {
+          "type": "string",
+          "description": "DEPLOY_FAILED, BACKUP_FAILED, RESTORE_FAILED."
+        },
+        "quietReason": {
+          "$ref": "#/types/pethost:index:IncidentQuietReason",
+          "description": "Set = nobody is told of it."
+        },
+        "requestCount": {
+          "type": "integer",
+          "description": "HTTP_ERRORS, HTTP_SLOW: the window's requests at open."
+        },
+        "resolveTime": {
+          "type": "string",
+          "description": "When it and every incident joined to it cleared. Absent = open."
+        },
+        "service": {
+          "type": "string",
+          "description": "As in its ProjectProblem."
+        },
+        "trafficRule": {
+          "$ref": "#/types/pethost:index:TrafficRule",
+          "description": "HTTP_ERRORS, HTTP_SLOW."
+        },
+        "value": {
+          "type": "number",
+          "description": "HTTP_ERRORS, HTTP_SLOW: the metric at open."
+        }
+      }
+    },
+    "pethost:index:IncidentEvidence": {
+      "type": "object",
+      "description": "What the machine saw when an incident opened, kept with it. Untrusted.",
+      "properties": {
+        "checkResult": {
+          "$ref": "#/types/pethost:index:SiteCheckResult",
+          "description": "SITE_DOWN: the third failure."
+        },
+        "exitCode": {
+          "type": "integer",
+          "description": "The service's container: SERVICE_* kinds, and SITE_DOWN's service."
+        },
+        "healthOutput": {
+          "type": "string",
+          "description": "The last healthcheck's, ≤1 KiB."
+        },
+        "logLines": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:LogLine"
+          },
+          "description": "The service's last ≤20 before it opened, oldest first."
+        },
+        "oomKilled": {
+          "type": "boolean"
+        },
+        "restartCount": {
+          "type": "integer",
+          "description": "In the 10 minutes before."
+        },
+        "topPath": {
+          "$ref": "#/types/pethost:index:HttpPathTraffic",
+          "description": "HTTP_ERRORS: the path with the most 5xx in the window; HTTP_SLOW: the slowest."
+        }
+      }
+    },
+    "pethost:index:IncidentQuietReason": {
+      "type": "string",
+      "enum": [
+        {
+          "name": "Muted",
+          "value": "MUTED"
+        },
+        {
+          "name": "Off",
+          "value": "OFF"
+        },
+        {
+          "name": "FirstEvaluation",
+          "value": "FIRST_EVALUATION",
+          "description": "Already so when the machine first watched it, as after the update that brought alerts."
+        },
+        {
+          "name": "ManualDeploy",
+          "value": "MANUAL_DEPLOY",
+          "description": "A deploy someone ran failed: they watch it."
+        }
+      ]
+    },
+    "pethost:index:LogLine": {
+      "type": "object",
+      "properties": {
+        "service": {
+          "type": "string"
+        },
+        "stream": {
+          "$ref": "#/types/pethost:index:OutputStream"
+        },
+        "text": {
+          "type": "string",
+          "description": "A line as written, with its colour codes (SGR escape sequences); other escape sequences, and control characters but tab, are removed. A line over 4 KiB is cut (over 16 KiB in streams). Untrusted."
+        },
+        "time": {
+          "type": "string",
+          "description": "A Timestamp represents a point in time independent of any time zone or local calendar, encoded as a count of seconds and fractions of seconds at nanosecond resolution."
+        }
+      }
+    },
+    "pethost:index:Machine": {
+      "type": "object",
+      "properties": {
+        "acmeEnabled": {
+          "type": "boolean",
+          "description": "True = a host that no certificate installed on the machine covers gets one from Let's Encrypt once it resolves to the machine. False, always written = such a host serves plain HTTP only."
+        },
+        "alertChannels": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:AlertDestination"
+          },
+          "description": "Where Pethost tells the person of incidents: the account's channels that are on, email first, then the oldest. The person sets them in the panel's Settings → Alerts; no tool does. Empty = alerts reach nobody."
+        },
+        "appsDomain": {
+          "type": "string",
+          "description": "The person's domain on Pethost, e.g. \"sam.pethost.app\": theirs alone, so \"my domain\" or \"my Pethost domain\" means this one unless they name another. A route's host `\u003cname\u003e.\u003cappsDomain\u003e`, or appsDomain itself, works at once over HTTPS, with no DNS record to make, and a web port a project publishes gets such a host by itself (CreateProject). Only the person changes it, in the panel's settings. Empty = there is none: every host is a domain the person owns, and published ports all open on the machine."
+        },
+        "backupRetentionHours": {
+          "type": "integer",
+          "description": "Snapshots are pruned once they are this many hours older than their project's newest. 0 = kept forever: nothing deletes them."
+        },
+        "backupsEnabled": {
+          "type": "boolean",
+          "description": "True = every project is backed up nightly, and on demand. False, always written = nothing is backed up: there are no snapshots, and a deleted project or volume is gone for good."
+        },
+        "bootTime": {
+          "type": "string",
+          "description": "A Timestamp represents a point in time independent of any time zone or local calendar, encoded as a count of seconds and fractions of seconds at nanosecond resolution."
+        },
+        "cpuTotalCores": {
+          "type": "number"
+        },
+        "cpuUsedCores": {
+          "type": "number",
+          "description": "By projects and builds."
+        },
+        "daemonVersion": {
+          "type": "string"
+        },
+        "databaseEngines": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:DatabaseEngineOffer"
+          },
+          "description": "The databases the machine makes (CreateDatabase), one per engine, with the sizes they may take (RunProjectAction.setDatabaseSize)."
+        },
+        "diskTotalBytes": {
+          "type": "integer"
+        },
+        "diskUsage": {
+          "$ref": "#/types/pethost:index:DiskUsage",
+          "description": "Where the disk goes; the rest of diskUsedBytes is the filesystem's own metadata and the machine's small files."
+        },
+        "diskUsedBytes": {
+          "type": "integer",
+          "description": "The projects' disk. The operating system has its own partition outside it, and the machine's own files are left out: a new machine uses 0."
+        },
+        "dockerVersion": {
+          "type": "string"
+        },
+        "hostname": {
+          "type": "string",
+          "description": "The machine's name: what the person's own domains point at (a CNAME), and where they log in to a service's container (Service.sshCommand). CreateTransfer's URLs are on it as well, and no route can take it."
+        },
+        "hostnameIsAddress": {
+          "type": "boolean",
+          "description": "True = hostname is an IP address, not a name (a test machine's): no DNS record can point at it by name (a CNAME), so a domain must resolve to that address itself."
+        },
+        "location": {
+          "type": "string",
+          "description": "Where it runs, e.g. \"Europe\". Empty = not known."
+        },
+        "memoryLimitsBytes": {
+          "type": "integer",
+          "description": "The sum of every service's `mem_limit`. Limits, not a reservation: they may add up to more than memoryTotalBytes. What the projects use is memoryUsedBytes."
+        },
+        "memoryTotalBytes": {
+          "type": "integer",
+          "description": "The machine's, less a reserve for the system."
+        },
+        "memoryUsedBytes": {
+          "type": "integer",
+          "description": "Without page cache, as `docker stats` counts."
+        },
+        "name": {
+          "type": "string",
+          "description": "Its plan's name, e.g. \"Starter\"."
+        },
+        "restartRequiredTime": {
+          "type": "string",
+          "description": "When an update started to need a machine restart. Absent = none is needed."
+        },
+        "sampleTime": {
+          "type": "string",
+          "description": "When the figures below were read."
+        },
+        "scheduledRestartTime": {
+          "type": "string",
+          "description": "When RunMachineAction.restartMachine will restart it; later while what it waits for is still going on (RestartMachineAction.interruptOperations). Absent = not scheduled."
+        },
+        "sessions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:MachineSession"
+          },
+          "description": "What people have open in the containers now, oldest first: at most 100, the most the machine holds at once."
+        },
+        "snapshotListFailureMessage": {
+          "type": "string",
+          "description": "Why the machine could not read that list, while backups are on and snapshotListTime is absent: the backup repository's error, e.g. a wrong password or a host that does not answer. The machine keeps trying. Empty = no read has failed, or the list is known, or backups are off."
+        },
+        "snapshotListTime": {
+          "type": "string",
+          "description": "When the machine last read the backup repository's list of snapshots whole. Absent = not yet (snapshotListFailureMessage says why, once a read failed), or backups are off: snapshot counts, Volume.lastBackupTime, Project.snapshots and GetMachine.deletedProjects are then not known, rather than none."
+        },
+        "sshHostKeyFingerprint": {
+          "type": "string",
+          "description": "\"SHA256:...\", to check on the first connection."
+        },
+        "sshKeys": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:SshKey"
+          },
+          "description": "The person's public keys: each logs in to every container. Empty = none yet: nobody can log in until RunMachineAction.addSshKey adds one."
+        }
+      }
+    },
+    "pethost:index:MachineSession": {
+      "type": "object",
+      "description": "Something a person has open in a container: a web terminal (OpenTerminal), a database's client (OpenDatabaseClient), or, through SSH, a program, SFTP or one connection of a tunnel. It lasts until the program exits or the connection closes; RunMachineAction.endSessionId ends it sooner.",
+      "properties": {
+        "clientAddress": {
+          "type": "string",
+          "description": "The person's IP address."
+        },
+        "kind": {
+          "$ref": "#/types/pethost:index:MachineSessionKind"
+        },
+        "port": {
+          "type": "integer",
+          "description": "TUNNEL: the container's port."
+        },
+        "projectId": {
+          "type": "string"
+        },
+        "service": {
+          "type": "string"
+        },
+        "sessionId": {
+          "type": "string",
+          "description": "For RunMachineAction.endSessionId."
+        },
+        "sshKeyFingerprint": {
+          "type": "string"
+        },
+        "sshKeyLabel": {
+          "type": "string",
+          "description": "Through SSH: the key they logged in with, as it was then. Empty for WEB_TERMINAL and DATABASE_CLIENT."
+        },
+        "startTime": {
+          "type": "string",
+          "description": "A Timestamp represents a point in time independent of any time zone or local calendar, encoded as a count of seconds and fractions of seconds at nanosecond resolution."
+        }
+      }
+    },
+    "pethost:index:MachineSessionKind": {
+      "type": "string",
+      "enum": [
+        {
+          "name": "WebTerminal",
+          "value": "WEB_TERMINAL",
+          "description": "The web panel's terminal."
+        },
+        {
+          "name": "SshTerminal",
+          "value": "SSH_TERMINAL",
+          "description": "A program in a terminal, such as `ssh`'s shell."
+        },
+        {
+          "name": "SshCommand",
+          "value": "SSH_COMMAND",
+          "description": "A program without a terminal, such as `ssh ... \u003ccommand\u003e` or rsync."
+        },
+        {
+          "name": "Sftp",
+          "value": "SFTP",
+          "description": "scp, sftp or sshfs."
+        },
+        {
+          "name": "Tunnel",
+          "value": "TUNNEL",
+          "description": "One connection of an `ssh -L` tunnel to `port`."
+        },
+        {
+          "name": "DatabaseClient",
+          "value": "DATABASE_CLIENT",
+          "description": "The web panel's client of a database."
+        }
+      ]
+    },
+    "pethost:index:Operation": {
+      "type": "object",
+      "properties": {
+        "adjustments": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "DEPLOY: what making that version changed that its request did not write, for people: the earlier deploy whose files it took, the compose file it took or wrote for a Dockerfile, the compose files it left out, the project's /.env and x-pethost kept in place of the version's own. Nothing else in the compose file is changed: it runs as written."
+        },
+        "archiveName": {
+          "type": "string",
+          "description": "DEPLOY of an uploaded archive: its file name."
+        },
+        "changedPathCount": {
+          "type": "integer",
+          "description": "DEPLOY: the paths its request changed, in all."
+        },
+        "changedPaths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "DEPLOY: the paths its request changed, for people, the first 10: DeployProject.files, or CreateProject's files; a move lists both paths. A commit's or an archive's own files are not listed: githubCommit or archiveName says what they brought."
+        },
+        "databaseMemoryLimitBytes": {
+          "type": "integer",
+          "description": "DEPLOY of a size change (RunProjectAction.setDatabaseSize): the size it gave the database."
+        },
+        "deployFailureReason": {
+          "$ref": "#/types/pethost:index:DeployFailureReason",
+          "description": "DEPLOY or RECREATE_SERVICE that FAILED: why, to branch on."
+        },
+        "failedExitCode": {
+          "type": "integer",
+          "description": "DEPLOY or RECREATE_SERVICE that failed CONTAINER_EXITED."
+        },
+        "failureMessage": {
+          "type": "string",
+          "description": "When FAILED: why, for people. The log says more."
+        },
+        "filesKept": {
+          "type": "boolean",
+          "description": "DEPLOY: true = the machine keeps the files it deployed, which are no longer the project's: DeployProject.rollbackDeployId puts them back. It keeps the 3 newest versions of the files before the current one; of deploys that changed only /.env or x-pethost, whose files are the same, the newest has it."
+        },
+        "filesOperationId": {
+          "type": "string",
+          "description": "DEPLOY: the deploy that first deployed its files: itself when its request brought or changed files (a commit, an archive, a file other than /.env); else an earlier one, as after a deploy that changed only /.env or x-pethost."
+        },
+        "finishTime": {
+          "type": "string",
+          "description": "Absent while in progress."
+        },
+        "githubCommit": {
+          "$ref": "#/types/pethost:index:GithubCommit",
+          "description": "DEPLOY of a github project: the commit its files are, also when it changed only /.env or x-pethost."
+        },
+        "kind": {
+          "$ref": "#/types/pethost:index:OperationKind"
+        },
+        "madeCurrent": {
+          "type": "boolean",
+          "description": "DEPLOY, or a RESTORE that brought a deleted project back: true = it made its files the project's. It stays true once a later deploy replaces them: Project.deployId names the one whose files the project has now. A deploy switches the files partway, when it starts the containers, so one that FAILED or was CANCELLED without it left the files as they were: to retry, send all its changes again. A project's first deploy has it from its start: its files stay however it ends, to fix and deploy again."
+        },
+        "operationId": {
+          "type": "string"
+        },
+        "restoredVolumes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "RESTORE: the volumes it replaced."
+        },
+        "service": {
+          "type": "string",
+          "description": "RECREATE_SERVICE: the service. A failed DEPLOY or RECREATE_SERVICE: the service that failed."
+        },
+        "snapshotId": {
+          "type": "string",
+          "description": "BACKUP, or DELETE's final backup, that succeeded: the snapshot taken. RESTORE: the snapshot restored."
+        },
+        "startTime": {
+          "type": "string",
+          "description": "A Timestamp represents a point in time independent of any time zone or local calendar, encoded as a count of seconds and fractions of seconds at nanosecond resolution."
+        },
+        "status": {
+          "$ref": "#/types/pethost:index:OperationStatus"
+        },
+        "undoSnapshotId": {
+          "type": "string",
+          "description": "RESTORE: the backup taken first; restore it to undo. Empty = none was taken."
+        }
+      }
+    },
+    "pethost:index:OperationKind": {
+      "type": "string",
+      "enum": [
+        {
+          "name": "Deploy",
+          "value": "DEPLOY"
+        },
+        {
+          "name": "RecreateService",
+          "value": "RECREATE_SERVICE"
+        },
+        {
+          "name": "Backup",
+          "value": "BACKUP"
+        },
+        {
+          "name": "Restore",
+          "value": "RESTORE"
+        },
+        {
+          "name": "Delete",
+          "value": "DELETE"
+        }
+      ]
+    },
+    "pethost:index:OperationLogLine": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string",
+          "description": "From Compose, BuildKit, restic or the daemon, as LogLine.text is kept; at most 2 KiB, a longer line is cut."
+        },
+        "time": {
+          "type": "string",
+          "description": "A Timestamp represents a point in time independent of any time zone or local calendar, encoded as a count of seconds and fractions of seconds at nanosecond resolution."
+        }
+      }
+    },
+    "pethost:index:OperationStatus": {
+      "type": "string",
+      "enum": [
+        {
+          "name": "InProgress",
+          "value": "IN_PROGRESS"
+        },
+        {
+          "name": "Succeeded",
+          "value": "SUCCEEDED"
+        },
+        {
+          "name": "Failed",
+          "value": "FAILED"
+        },
+        {
+          "name": "Cancelled",
+          "value": "CANCELLED"
+        }
+      ]
+    },
+    "pethost:index:OutputStream": {
+      "type": "string",
+      "enum": [
+        {
+          "name": "Stdout",
+          "value": "STDOUT"
+        },
+        {
+          "name": "Stderr",
+          "value": "STDERR"
+        }
+      ]
+    },
+    "pethost:index:Project": {
+      "type": "object",
+      "properties": {
+        "alerts": {
+          "$ref": "#/types/pethost:index:ProjectAlerts",
+          "description": "What Pethost watches and how each part stands."
+        },
+        "cpuUsedCores": {
+          "type": "number"
+        },
+        "database": {
+          "$ref": "#/types/pethost:index:Database",
+          "description": "Set = a database project (CreateDatabase): its engine, its state and how apps sign in."
+        },
+        "deployId": {
+          "type": "string",
+          "description": "The operationId of the deploy whose files the project has. For a deleted project brought back, the RESTORE that did it. Empty = no deploy yet."
+        },
+        "deployStatus": {
+          "$ref": "#/types/pethost:index:OperationStatus",
+          "description": "How that operation went, or is going. Unspecified = no deploy yet."
+        },
+        "deployTime": {
+          "type": "string",
+          "description": "When the current deploy made its files the project's. Absent = no deploy yet, or one that failed or was cancelled leaving no service with a container: nothing runs."
+        },
+        "hosts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:Host"
+          },
+          "description": "Every host of the routes, in the order of its first route."
+        },
+        "httpTrafficLastDay": {
+          "$ref": "#/types/pethost:index:HttpTrafficSummary",
+          "description": "Measured every few minutes."
+        },
+        "incidents": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:Incident"
+          },
+          "description": "The newest 5 that GetProjectRequest.incidentsBefore selects, newest first: an open one in full but its evidence (GetIncident), a resolved one as its id, kind, times, message, afterOperationId, quietReason and flapping."
+        },
+        "linkedDatabases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The database projects this one reaches (LinkDatabase), each at the host of its projectId."
+        },
+        "memoryUsedBytes": {
+          "type": "integer"
+        },
+        "metadata": {
+          "$ref": "#/types/pethost:index:ProjectMetadata"
+        },
+        "moreIncidents": {
+          "type": "boolean",
+          "description": "True = older ones remain: page with incidentsBefore and incidentsBeforeId."
+        },
+        "operations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:Operation"
+          },
+          "description": "Newest first, every one the machine keeps: the newest 20, any still in progress, and however old, the current deploy's (deployId) and those whose files it keeps for a rollback (Operation.filesKept). Older ones are gone."
+        },
+        "passwordProtected": {
+          "type": "boolean",
+          "description": "True = every route asks visitors for the project's password (`xPethost.password`). The password itself is never returned."
+        },
+        "problems": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:ProjectProblem"
+          },
+          "description": "Something that needs attention."
+        },
+        "projectId": {
+          "type": "string"
+        },
+        "routes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:Route"
+          },
+          "description": "x-pethost.routes as the machine holds them, in order: the list xPethost.routes replaces, so send these back with your change to add, change or remove one."
+        },
+        "runningServicesAction": {
+          "$ref": "#/types/pethost:index:RunningServicesAction",
+          "description": "The startServices, stopServices or restartServices that runs now, whoever called it (RunProjectAction waits for its end). Until then the project takes no other action or deploy, and Service.state is still what it was before. Absent = none."
+        },
+        "services": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:Service"
+          },
+          "description": "By name."
+        },
+        "snapshotCount": {
+          "type": "integer",
+          "description": "The project's, in all; see snapshotListTime."
+        },
+        "snapshotListTime": {
+          "type": "string",
+          "description": "When the machine read the list of snapshots that snapshotCount, Volume.snapshotCount and Volume.lastBackupTime come from (Machine.snapshotListTime, as sampled with them). Absent = the list is not known: backups are off, or it is not read yet (Machine.snapshotListFailureMessage says why); a count of 0 then does not mean none."
+        },
+        "snapshots": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:Snapshot"
+          },
+          "description": "The newest 10, newest first, of those GetProjectRequest's snapshotsBefore and snapshotsVolume select. Empty while backups are off or the list is not read yet (snapshotListTime)."
+        },
+        "source": {
+          "$ref": "#/types/pethost:index:ProjectSource",
+          "description": "Where the files come from (THE PROJECT IS ITS DIRECTORY)."
+        },
+        "uptimeDays": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:UptimeDay"
+          },
+          "description": "Oldest first, GetProjectRequest.uptimeDayCount of them, today's last."
+        },
+        "url": {
+          "type": "string",
+          "description": "As in ProjectSummary."
+        },
+        "volumes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:Volume"
+          },
+          "description": "Every one the machine holds for the project, by name."
+        },
+        "xPethostAppliesAtOnce": {
+          "type": "boolean",
+          "description": "True = the current deploy succeeded and every service has a container, so a deploy whose files differ only inside `x-pethost` (or not at all) applies at once, with no build or pull, and no restart but the one DeployProject names. False = the next deploy runs in full."
+        }
+      }
+    },
+    "pethost:index:ProjectAlerts": {
+      "type": "object",
+      "description": "What Pethost watches on a project (SetProjectAlerts), and how each part stands now. Service crashes, running out of memory, failed healthchecks, and failed backups, restores and auto-deploys are always watched.",
+      "properties": {
+        "checks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:SiteCheckState"
+          },
+          "description": "Until set: the project's URL at \"/\" (machineDefault); none without a route."
+        },
+        "muteEndTime": {
+          "type": "string",
+          "description": "Absent = not muted."
+        },
+        "off": {
+          "type": "boolean",
+          "description": "True = incidents are recorded, nothing is sent."
+        },
+        "trafficRules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:TrafficRuleState"
+          },
+          "description": "Until set: 10 or more 5xx in 5 minutes, of every request (machineDefault); none without a route."
+        },
+        "uptimePercent": {
+          "type": "number",
+          "description": "Of the time the checks ran in the last 30 days, the share they were up, e.g. 99.97. Absent = no check ran."
+        }
+      }
+    },
+    "pethost:index:ProjectExtension": {
+      "type": "object",
+      "description": "x-pethost as data. Absent parts stay.",
+      "properties": {
+        "metadata": {
+          "$ref": "#/types/pethost:index:ProjectMetadata",
+          "description": "Sets the fields given; an empty one is removed."
+        },
+        "password": {
+          "type": "string",
+          "description": "Visitors of every route must enter it. Empty = it stays.",
+          "secret": true
+        },
+        "removePassword": {
+          "type": "boolean",
+          "description": "True = no password. Not with password."
+        },
+        "removeRoutes": {
+          "type": "boolean",
+          "description": "True = the project has no route from now on. Not with routes."
+        },
+        "routes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:Route"
+          },
+          "description": "The project's routes from now on: these replace all it has, so send Project.routes with your change to add, change or remove one. Empty = they stay."
+        }
+      }
+    },
+    "pethost:index:ProjectMetadata": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "One line."
+        },
+        "emoji": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string",
+          "description": "Empty = none: people see the id."
+        },
+        "notes": {
+          "type": "string",
+          "description": "Free text."
+        }
+      }
+    },
+    "pethost:index:ProjectProblem": {
+      "type": "object",
+      "description": "Something that needs attention. A service has at most one, its cause first.",
+      "properties": {
+        "incidentId": {
+          "type": "string",
+          "description": "The open incident that records it (Project.incidents). Empty = none yet."
+        },
+        "kind": {
+          "$ref": "#/types/pethost:index:ProjectProblemKind"
+        },
+        "operationId": {
+          "type": "string",
+          "description": "DEPLOY_FAILED, DEPLOY_CANCELLED, BACKUP_FAILED, RESTORE_FAILED: the operation; GetOperation gives its log."
+        },
+        "problemMessage": {
+          "type": "string",
+          "description": "One sentence for people, without a time of day (sinceTime has it), e.g. \"bot fails its healthcheck: 11 failures in a row\". A failed or cancelled deploy's also says whether it changed the project."
+        },
+        "service": {
+          "type": "string",
+          "description": "Empty = not about one service. DEPLOY_FAILED: the service that failed it, when one did."
+        },
+        "sinceTime": {
+          "type": "string",
+          "description": "DEPLOY_FAILED, DEPLOY_CANCELLED, BACKUP_FAILED, RESTORE_FAILED: the operation's end. SERVICE_EXITED, RESTARTING and OUT_OF_MEMORY: when its last run ended, once it did; else its last start. AUTO_DEPLOY_REFUSED: when auto-deploy tried the commit. Absent = not known, as for UNHEALTHY."
+        }
+      }
+    },
+    "pethost:index:ProjectProblemKind": {
+      "type": "string",
+      "enum": [
+        {
+          "name": "DeployFailed",
+          "value": "DEPLOY_FAILED",
+          "description": "The latest deploy failed. Its operation says why, and with madeCurrent whether its files were applied (then some containers may run the old configuration)."
+        },
+        {
+          "name": "ServiceUnhealthy",
+          "value": "SERVICE_UNHEALTHY",
+          "description": "Running; its healthcheck fails."
+        },
+        {
+          "name": "ServiceRestarting",
+          "value": "SERVICE_RESTARTING",
+          "description": "Docker is restarting it, or it runs and Docker restarted it recently: likely a crash loop."
+        },
+        {
+          "name": "ServiceOutOfMemory",
+          "value": "SERVICE_OUT_OF_MEMORY",
+          "description": "Its last run was killed for exceeding its memory, or a process of it was since it started. A loop whose runs last 10 s or more shows as RESTARTING: Docker forgets the kill when it starts it again."
+        },
+        {
+          "name": "BackupFailed",
+          "value": "BACKUP_FAILED",
+          "description": "The latest backup failed; its operation says why."
+        },
+        {
+          "name": "DeployCancelled",
+          "value": "DEPLOY_CANCELLED",
+          "description": "The latest deploy was cancelled; its operation says, with madeCurrent, whether its files were applied."
+        },
+        {
+          "name": "ServiceExited",
+          "value": "SERVICE_EXITED",
+          "description": "It exited on its own with a non-zero code (Service.exitCode) and stays down: its restart policy does not restart it. A service a person stopped is no problem."
+        },
+        {
+          "name": "RestoreFailed",
+          "value": "RESTORE_FAILED",
+          "description": "A restore failed or was cancelled, or a machine restart cut it short, and its harm remains: services it stopped are still stopped (starting them ends it); unless a restore that succeeded since replaced them, its volumes may be partly restored, and its operation's undoSnapshotId holds them as they were. Or it brought a deleted project back, and no deploy has replaced it. The newest such restore counts; one that changed nothing does not."
+        },
+        {
+          "name": "AutoDeployRefused",
+          "value": "AUTO_DEPLOY_REFUSED",
+          "description": "Auto-deploy is on, and the machine refused the commit it last tried, the branch's newest then, which the files are not; the message says why. Each commit is tried once: fix it and push, or DeployProject with newestCommit, whose refusal gives the violations."
+        },
+        {
+          "name": "ServicePortClosed",
+          "value": "SERVICE_PORT_CLOSED",
+          "description": "It runs and does not listen on the port a route sends to (or only at 127.0.0.1, which the proxy cannot reach): the route answers 502. The message names the ports it does listen on (Service.listeningPorts): change the route's port with DeployProject.xPethost, or the app."
+        },
+        {
+          "name": "SiteDown",
+          "value": "SITE_DOWN",
+          "description": "A site check (Project.alerts) failed 3 times in a row; service: the one its route sends to."
+        },
+        {
+          "name": "HttpErrors",
+          "value": "HTTP_ERRORS",
+          "description": "A traffic rule on 5xx holds."
+        },
+        {
+          "name": "HttpSlow",
+          "value": "HTTP_SLOW",
+          "description": "A traffic rule on p95 holds."
+        },
+        {
+          "name": "DatabaseSetup",
+          "value": "DATABASE_SETUP",
+          "description": "A database the machine has not set up for 2 minutes since it started, or whose apps' user is gone: the message says the engine's error."
+        }
+      ]
+    },
+    "pethost:index:ProjectSource": {
+      "type": "object",
+      "description": "Where the files come from (THE PROJECT IS ITS DIRECTORY).",
+      "properties": {
+        "files": {
+          "type": "boolean",
+          "description": "True = the files live on the machine.\n\nAt most one of `files` or `github` is set."
+        },
+        "github": {
+          "$ref": "#/types/pethost:index:GithubSource",
+          "description": "Input: an absent field keeps its value (setSource) or takes its default (new source).\n\nAt most one of `files` or `github` is set."
+        }
+      }
+    },
+    "pethost:index:ProjectSummary": {
+      "type": "object",
+      "properties": {
+        "cpuUsedCores": {
+          "type": "number"
+        },
+        "database": {
+          "$ref": "#/types/pethost:index:DatabaseSummary",
+          "description": "Set = a database project (CreateDatabase)."
+        },
+        "deployTime": {
+          "type": "string",
+          "description": "As in Project."
+        },
+        "diskUsedBytes": {
+          "type": "integer",
+          "description": "Its volumes, files, what its containers wrote outside volumes, and its images: one it shares with another project counts in both. Measured every few minutes."
+        },
+        "hosts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Every host its routes use, in the routes' order."
+        },
+        "httpTrafficLastDay": {
+          "$ref": "#/types/pethost:index:HttpTrafficSummary",
+          "description": "The last day's requests, 5xx responses and latency, as in Project: QueryHttpTraffic says which paths. Absent = no request."
+        },
+        "memoryUsedBytes": {
+          "type": "integer"
+        },
+        "metadata": {
+          "$ref": "#/types/pethost:index:ProjectMetadata"
+        },
+        "pinned": {
+          "type": "boolean",
+          "description": "A github project stays on its commit: GithubSource.pinned."
+        },
+        "problems": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:ProjectProblem"
+          },
+          "description": "Most urgent first. Empty = nothing wrong."
+        },
+        "projectId": {
+          "type": "string"
+        },
+        "runningOperations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:Operation"
+          },
+          "description": "Operations in progress, newest first: a backup can run beside another one."
+        },
+        "services": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:ServiceSummary"
+          },
+          "description": "By name."
+        },
+        "url": {
+          "type": "string",
+          "description": "The first route's host as a URL, e.g. \"https://recipes.example.com\". Empty = no route."
+        }
+      }
+    },
+    "pethost:index:PublishedPort": {
+      "type": "object",
+      "description": "A port that `ports:` opens on the machine directly, to anyone, bypassing the proxy.",
+      "properties": {
+        "containerPort": {
+          "type": "integer"
+        },
+        "machinePort": {
+          "type": "integer",
+          "description": "0 = Docker picks one when the container starts."
+        },
+        "protocol": {
+          "type": "string",
+          "description": "\"tcp\", \"udp\" or \"sctp\"."
+        }
+      }
+    },
+    "pethost:index:RestartPolicy": {
+      "type": "string",
+      "description": "Docker's restart policies: what happens when the process exits, and when the machine starts.",
+      "enum": [
+        {
+          "name": "No",
+          "value": "NO",
+          "description": "Never restarted."
+        },
+        {
+          "name": "OnFailure",
+          "value": "ON_FAILURE",
+          "description": "Restarted when it exits non-zero. When the machine or Docker restarts it comes back unless it exited 0 (a finished job), so one stopped with stopServices comes back too. The default when compose.yaml sets none."
+        },
+        {
+          "name": "UnlessStopped",
+          "value": "UNLESS_STOPPED",
+          "description": "Always restarted, unless stopped with RunProjectAction.stopServices."
+        },
+        {
+          "name": "Always",
+          "value": "ALWAYS"
+        }
+      ]
+    },
+    "pethost:index:Route": {
+      "type": "object",
+      "description": "An x-pethost route: requests for `host` under `path` go to `port` of `service`. The field names are the YAML keys.",
+      "properties": {
+        "host": {
+          "type": "string",
+          "description": "`\u003cname\u003e.\u003cMachine.appsDomain\u003e`, the person's domain on Pethost: HTTPS at once, nothing to set up. Or a domain they own: a CNAME to Machine.hostname (an ALIAS at the apex, never an IP address), certified once it resolves."
+        },
+        "path": {
+          "type": "string",
+          "description": "Whole segments, the longest wins. Empty = \"/\": every path."
+        },
+        "port": {
+          "type": "integer",
+          "description": "The port the service listens on in its container, at 0.0.0.0."
+        },
+        "service": {
+          "type": "string"
+        },
+        "stripPath": {
+          "type": "boolean",
+          "description": "True = the path's prefix is removed from the request."
+        }
+      }
+    },
+    "pethost:index:RunningServicesAction": {
+      "type": "object",
+      "description": "A start, stop or restart of services that has not ended yet.",
+      "properties": {
+        "kind": {
+          "$ref": "#/types/pethost:index:ServicesActionKind"
+        },
+        "services": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Those it acts on."
+        },
+        "startTime": {
+          "type": "string",
+          "description": "A Timestamp represents a point in time independent of any time zone or local calendar, encoded as a count of seconds and fractions of seconds at nanosecond resolution."
+        }
+      }
+    },
+    "pethost:index:Service": {
+      "type": "object",
+      "properties": {
+        "buildsImage": {
+          "type": "boolean",
+          "description": "Built on the machine from a `build:` section."
+        },
+        "command": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "What the main process runs, as compose.yaml writes it (entrypoint, then command), `${...}` not interpolated, so that no value of an env file shows; the image's own argv when compose.yaml writes neither. Empty = not known without those values: compose.yaml loads only interpolated, e.g. with an `include` path from .env."
+        },
+        "containerRunning": {
+          "type": "boolean",
+          "description": "True = its container runs, as RunServiceCommand, OpenTerminal and ReadPath of its own files (outside volumes) need: in RUNNING, HEALTHY and UNHEALTHY, and in STARTING once its process started."
+        },
+        "cpuLimitCores": {
+          "type": "number",
+          "description": "0 = no limit."
+        },
+        "cpuUsedCores": {
+          "type": "number"
+        },
+        "envFiles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The files its `envFile:` names, as compose.yaml writes them, e.g. \"./.env\": relative to the project directory. Change them with DeployProject.files."
+        },
+        "environment": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:EnvironmentVariable"
+          },
+          "description": "What the container is configured with, not what its image sets."
+        },
+        "exitCode": {
+          "type": "integer"
+        },
+        "finishTime": {
+          "type": "string",
+          "description": "Set once it exited, and while Docker waits to restart it: when, with what code (0 = a clean exit: a job that finished, or a server stopped; 137 = killed), and whether a process of it was killed for exceeding its memory."
+        },
+        "healthCheck": {
+          "$ref": "#/types/pethost:index:HealthCheck",
+          "description": "Absent = no healthcheck."
+        },
+        "image": {
+          "type": "string",
+          "description": "The image as compose.yaml names it; for `build:` without `image:`, the name Compose gives."
+        },
+        "imageDigest": {
+          "type": "string",
+          "description": "The registry digest it was pulled as, \"sha256:...\". Empty for a built image."
+        },
+        "imageSizeBytes": {
+          "type": "integer",
+          "description": "Absent until the machine next measures sizes, every few minutes, as after a build or pull."
+        },
+        "listeningPorts": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "description": "The TCP ports its processes listen on now, at an address the proxy and the other services reach: a route's port must be one of them. Empty = it does not run, or listens on none."
+        },
+        "memoryLimitBytes": {
+          "type": "integer",
+          "description": "0 = no limit: it shares the machine."
+        },
+        "memoryUsedBytes": {
+          "type": "integer"
+        },
+        "outOfMemory": {
+          "type": "boolean"
+        },
+        "ports": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "description": "The ports it is reached at, as far as the machine knows: those compose.yaml or its image declares and those its routes send to. The project's other services reach it at `\u003cservice\u003e:\u003cport\u003e`."
+        },
+        "publishedPorts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:PublishedPort"
+          },
+          "description": "The ports `ports:` opens on the machine now: not one a route serves, nor one bound to 127.0.0.1."
+        },
+        "restartCount": {
+          "type": "integer",
+          "description": "Restarts by Docker since the container was created."
+        },
+        "restartPolicy": {
+          "$ref": "#/types/pethost:index:RestartPolicy"
+        },
+        "runAsUser": {
+          "type": "string"
+        },
+        "service": {
+          "type": "string",
+          "language": {
+            "csharp": {
+              "name": "ServiceInfo"
+            }
+          }
+        },
+        "sshCommand": {
+          "type": "string",
+          "description": "What the person runs in their own terminal for a shell in its container, e.g. \"ssh web.notes@m1.pethost.dev\". It works once one of their public keys is among Machine.sshKeys."
+        },
+        "sshLogin": {
+          "type": "string",
+          "description": "The address sshCommand logs in at, e.g. \"web.notes@m1.pethost.dev\": scp, sftp, rsync and `ssh -L` tunnels take it too. Empty when sshCommand is."
+        },
+        "startTime": {
+          "type": "string",
+          "description": "Of the current or last run."
+        },
+        "state": {
+          "$ref": "#/types/pethost:index:ServiceState"
+        },
+        "volumeMounts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:VolumeMount"
+          }
+        },
+        "writableLayerBytes": {
+          "type": "integer",
+          "description": "Written outside volumes: lost on a recreate."
+        }
+      }
+    },
+    "pethost:index:ServiceState": {
+      "type": "string",
+      "enum": [
+        {
+          "name": "NotCreated",
+          "value": "NOT_CREATED",
+          "description": "Declared; no container yet."
+        },
+        {
+          "name": "Starting",
+          "value": "STARTING",
+          "description": "Starting, or created while an operation that starts containers runs (deploy, recreateService, restore); its healthcheck has not passed yet."
+        },
+        {
+          "name": "Running",
+          "value": "RUNNING",
+          "description": "Running, without a healthcheck."
+        },
+        {
+          "name": "Healthy",
+          "value": "HEALTHY",
+          "description": "Running; its healthcheck passes."
+        },
+        {
+          "name": "Unhealthy",
+          "value": "UNHEALTHY",
+          "description": "Running; its healthcheck fails."
+        },
+        {
+          "name": "Restarting",
+          "value": "RESTARTING",
+          "description": "Exited and Docker is restarting it."
+        },
+        {
+          "name": "Stopped",
+          "value": "STOPPED",
+          "description": "Not running: stopped by stopServices or a restore, never started, paused or dead."
+        },
+        {
+          "name": "Exited",
+          "value": "EXITED",
+          "description": "Not running: it exited on its own (see exitCode; 0 = a job that finished)."
+        }
+      ]
+    },
+    "pethost:index:ServiceSummary": {
+      "type": "object",
+      "properties": {
+        "service": {
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/types/pethost:index:ServiceState"
+        }
+      }
+    },
+    "pethost:index:ServicesActionKind": {
+      "type": "string",
+      "enum": [
+        {
+          "name": "Start",
+          "value": "START"
+        },
+        {
+          "name": "Stop",
+          "value": "STOP"
+        },
+        {
+          "name": "Restart",
+          "value": "RESTART"
+        }
+      ]
+    },
+    "pethost:index:SiteCheck": {
+      "type": "object",
+      "description": "An address of the project the machine opens every minute through its proxy, from inside the machine. Down = no connection, a bad certificate, no answer in 10 s, the wrong status, or mustContain missing; 3 failures in a row open SITE_DOWN. A password page is passed.",
+      "properties": {
+        "expectStatus": {
+          "type": "integer",
+          "description": "100-599. 0 = any status below 500 is up: 401, 404 and redirects too."
+        },
+        "host": {
+          "type": "string",
+          "description": "A Host.host of the project."
+        },
+        "mustContain": {
+          "type": "string",
+          "description": "≤100 chars, in the body's first 64 KiB. Empty = not looked for."
+        },
+        "path": {
+          "type": "string",
+          "description": "\"/…\", ≤200 chars, a query allowed. Empty = \"/\"."
+        }
+      }
+    },
+    "pethost:index:SiteCheckResult": {
+      "type": "object",
+      "properties": {
+        "checkTime": {
+          "type": "string",
+          "description": "A Timestamp represents a point in time independent of any time zone or local calendar, encoded as a count of seconds and fractions of seconds at nanosecond resolution."
+        },
+        "durationMs": {
+          "type": "integer"
+        },
+        "failureMessage": {
+          "type": "string",
+          "description": "E.g. \"connection refused\", \"status 502\", \"the text is missing\". Empty = up."
+        },
+        "status": {
+          "type": "integer",
+          "description": "0 = no HTTP answer: failureMessage says why."
+        }
+      }
+    },
+    "pethost:index:SiteCheckState": {
+      "type": "object",
+      "properties": {
+        "check": {
+          "$ref": "#/types/pethost:index:SiteCheck",
+          "description": "An address of the project the machine opens every minute through its proxy, from inside the machine."
+        },
+        "incidentId": {
+          "type": "string",
+          "description": "The open incident. Empty = none."
+        },
+        "lastResult": {
+          "$ref": "#/types/pethost:index:SiteCheckResult",
+          "description": "Absent = not run yet."
+        },
+        "machineDefault": {
+          "type": "boolean",
+          "description": "The default check, as no list was set."
+        },
+        "status": {
+          "$ref": "#/types/pethost:index:AlertStatus"
+        }
+      }
+    },
+    "pethost:index:Snapshot": {
+      "type": "object",
+      "properties": {
+        "createTime": {
+          "type": "string",
+          "description": "A Timestamp represents a point in time independent of any time zone or local calendar, encoded as a count of seconds and fractions of seconds at nanosecond resolution."
+        },
+        "sizeBytes": {
+          "type": "integer",
+          "description": "Of its files, the directory and every volume. 0 = not known."
+        },
+        "snapshotId": {
+          "type": "string"
+        },
+        "volumes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The volumes it holds, besides the project's directory."
+        }
+      }
+    },
+    "pethost:index:SshKey": {
+      "type": "object",
+      "properties": {
+        "fingerprint": {
+          "type": "string",
+          "description": "\"SHA256:...\". Ignored on input."
+        },
+        "label": {
+          "type": "string",
+          "description": "Shown in the panel and session logs, e.g. \"MacBook Pro\"."
+        },
+        "publicKey": {
+          "type": "string",
+          "description": "The public key, as in authorized_keys: \"ssh-ed25519 AAAA...\"; never a private key."
+        }
+      }
+    },
+    "pethost:index:TrafficMetric": {
+      "type": "string",
+      "enum": [
+        {
+          "name": "ServerErrors",
+          "value": "SERVER_ERRORS",
+          "description": "5xx responses in the window."
+        },
+        {
+          "name": "ServerErrorPercent",
+          "value": "SERVER_ERROR_PERCENT",
+          "description": "5xx, of the window's requests (WebSockets too)."
+        },
+        {
+          "name": "LatencyP95Ms",
+          "value": "LATENCY_P95_MS"
+        }
+      ]
+    },
+    "pethost:index:TrafficRule": {
+      "type": "object",
+      "description": "Fires when `metric`, over the last windowMinutes of the requests `filter` selects, reaches `threshold` 2 minutes in a row; clears after 3 below.",
+      "properties": {
+        "filter": {
+          "$ref": "#/types/pethost:index:HttpTrafficFilter",
+          "description": "statusClass not taken."
+        },
+        "metric": {
+          "$ref": "#/types/pethost:index:TrafficMetric"
+        },
+        "minRequests": {
+          "type": "integer",
+          "description": "Percent and p95: fewer requests in the window leave the rule as it was. ≤10000. 0 = 20."
+        },
+        "threshold": {
+          "type": "number",
+          "description": "A count, a percent (0-100) or ms."
+        },
+        "windowMinutes": {
+          "type": "integer",
+          "description": "1-60. 0 = 5."
+        }
+      }
+    },
+    "pethost:index:TrafficRuleState": {
+      "type": "object",
+      "properties": {
+        "incidentId": {
+          "type": "string",
+          "description": "The open incident. Empty = none."
+        },
+        "machineDefault": {
+          "type": "boolean",
+          "description": "The default rule, as no list was set."
+        },
+        "requestCount": {
+          "type": "integer",
+          "description": "In the window then."
+        },
+        "rule": {
+          "$ref": "#/types/pethost:index:TrafficRule",
+          "description": "Fires when `metric`, over the last windowMinutes of the requests `filter` selects, reaches `threshold` 2 minutes in a row; clears after 3 below."
+        },
+        "status": {
+          "$ref": "#/types/pethost:index:AlertStatus"
+        },
+        "value": {
+          "type": "number",
+          "description": "The metric at the last evaluation."
+        }
+      }
+    },
+    "pethost:index:UptimeDay": {
+      "type": "object",
+      "description": "One UTC day of a project's site checks.",
+      "properties": {
+        "downSeconds": {
+          "type": "integer"
+        },
+        "startTime": {
+          "type": "string",
+          "description": "Midnight UTC."
+        },
+        "uptimePercent": {
+          "type": "number",
+          "description": "Absent = no check ran."
+        }
+      }
+    },
+    "pethost:index:Volume": {
+      "type": "object",
+      "properties": {
+        "declared": {
+          "type": "boolean",
+          "description": "False, always written = compose.yaml no longer declares it, so no service mounts it: it keeps its data and is in every backup until RunProjectAction.deleteVolume or the project is deleted. ReadPath reads it with the volume root, restoreSnapshot restores it, and declaring it again mounts it as it is."
+        },
+        "lastBackupTime": {
+          "type": "string",
+          "description": "Of the newest snapshot that holds this volume. Absent = no snapshot holds it, or the list is not known (Project.snapshotListTime)."
+        },
+        "mountedBy": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:VolumeMountedBy"
+          }
+        },
+        "sizeBytes": {
+          "type": "integer",
+          "description": "Measured every few minutes."
+        },
+        "snapshotCount": {
+          "type": "integer",
+          "description": "The snapshots that hold it, in all; GetProjectRequest.snapshotsVolume lists them. See Project.snapshotListTime."
+        },
+        "volume": {
+          "type": "string",
+          "language": {
+            "csharp": {
+              "name": "VolumeInfo"
+            }
+          }
+        }
+      }
+    },
+    "pethost:index:VolumeMount": {
+      "type": "object",
+      "properties": {
+        "containerPath": {
+          "type": "string",
+          "description": "E.g. \"/var/lib/postgresql/data\"."
+        },
+        "volume": {
+          "type": "string"
+        }
+      }
+    },
+    "pethost:index:VolumeMountedBy": {
+      "type": "object",
+      "properties": {
+        "containerPath": {
+          "type": "string"
+        },
+        "service": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}
