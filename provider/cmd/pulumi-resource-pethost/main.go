@@ -19,12 +19,7 @@ import (
 var schema string
 
 func main() {
-	server, err := provider.New(schema)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-	if err := p.RunProvider(context.Background(), "pethost", provider.Version, server); err != nil {
+	if err := p.RunProvider(context.Background(), "pethost", provider.Version, provider.New(schema)); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

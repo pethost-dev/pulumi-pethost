@@ -27,7 +27,7 @@ func (s *server) create(ctx context.Context, req p.CreateRequest) (p.CreateRespo
 
 	id := req.Properties.Get(r.id.JSONName()).AsString()
 	request := newMessage(r.create.method.Input())
-	if err := s.api.setFields(request, req.Properties, names(r.inputs)); err != nil {
+	if err := setFields(request, req.Properties, names(r.inputs)); err != nil {
 		return p.CreateResponse{}, err
 	}
 	ctx, cancel := withTimeout(ctx, req.Timeout)
@@ -75,7 +75,19 @@ func (s *server) read(ctx context.Context, req p.ReadRequest) (p.ReadResponse, e
 	if inputs.Len() == 0 {
 		inputs = property.NewMap(map[string]property.Value{r.id.JSONName(): property.New(req.ID)})
 	}
-	return p.ReadResponse{ID: req.ID, Properties: merged(inputs, outputs), Inputs: inputs}, nil
+	return p.ReadResponse{ID: req.ID, Properties: merged(inputsHeld(r, inputs, req.Properties), outputs), Inputs: inputs}, nil
+}
+
+// inputsHeld are the inputs as the state holds them, where it does: a refresh keeps the edits an
+// update made though it failed (failedUpdate), which the recorded inputs lack.
+func inputsHeld(r *resource, inputs, state property.Map) property.Map {
+	values := inputs.AsMap()
+	for _, input := range r.inputs {
+		if held, ok := state.GetOk(input.JSONName()); ok {
+			values[input.JSONName()] = held
+		}
+	}
+	return property.NewMap(values)
 }
 
 // update sends each update step that carries an input that changed, given or taken out, in the
@@ -95,12 +107,12 @@ func (s *server) update(ctx context.Context, req p.UpdateRequest) (p.UpdateRespo
 	old := oldInputs(req.OldInputs, req.State)
 	var response protoreflect.Message
 	for _, u := range dueSteps(r, changed(r, old, req.Inputs)) {
-		request, err := s.updateRequest(r, u, req.ID, old, req.Inputs)
+		request, err := s.updateRequest(r, u, req.ID, req.State, req.Inputs)
 		if err != nil {
 			return p.UpdateResponse{}, err
 		}
 		if response, err = s.run(ctx, u, request, r.id, req.ID); err != nil {
-			return p.UpdateResponse{}, err
+			return s.failedUpdate(ctx, r, req, response, err)
 		}
 	}
 
@@ -111,10 +123,28 @@ func (s *server) update(ctx context.Context, req p.UpdateRequest) (p.UpdateRespo
 	return p.UpdateResponse{Properties: merged(req.Inputs, outputs)}, nil
 }
 
+// failedUpdate answers an update whose step failed. An operation that made its changes before it
+// failed leaves them made, and Pulumi keeps the failure and the state answered, though not the new
+// inputs, whatever a provider says: the state then holds the new lists of edits, and the next run
+// sends only those it lacks, never again one the machine would now refuse, as a rename of a file
+// that has moved. Any other failure changed nothing, and the next run sends it all again.
+//
+// ponytail: every resource has one update step, so a step that failed is all that was due. A
+// resource with several, each with edits, would hold those of a later step that was never sent:
+// answer then with only what the steps sent so far carry.
+func (s *server) failedUpdate(ctx context.Context, r *resource, req p.UpdateRequest, response protoreflect.Message, err error) (p.UpdateResponse, error) {
+	var failed *operationFailed
+	if !errors.As(err, &failed) || !failed.madeCurrent {
+		return p.UpdateResponse{}, err
+	}
+	outputs, _ := s.outputs(ctx, r, req.ID, response)
+	return p.UpdateResponse{Properties: merged(req.Inputs, outputs), PartialState: &p.InitializationFailed{Reasons: []string{failed.summary()}}}, err
+}
+
 // dueSteps are the update steps that carry one of the inputs that changed, in the table's order;
 // with none changed, the retry step.
 func dueSteps(r *resource, due []protoreflect.FieldDescriptor) []*step {
-	if len(due) == 0 && r.retry != nil {
+	if len(due) == 0 {
 		return []*step{r.retry}
 	}
 	var steps []*step
@@ -138,8 +168,8 @@ func carriesAny(u *step, inputs []protoreflect.FieldDescriptor) bool {
 
 // updateRequest is the step's request for the resource: its id, and the inputs it carries that
 // are given, in its action's message if it sets one. A list of edits goes with only the edits
-// its old value lacks, the others being made; a retry sends none.
-func (s *server) updateRequest(r *resource, u *step, id string, old, inputs property.Map) (protoreflect.Message, error) {
+// the state's value lacks, the others being made.
+func (s *server) updateRequest(r *resource, u *step, id string, state, inputs property.Map) (protoreflect.Message, error) {
 	request := newMessage(u.method.Input())
 	request.Set(request.Descriptor().Fields().ByName(r.id.Name()), protoreflect.ValueOfString(id))
 	target := request
@@ -150,25 +180,21 @@ func (s *server) updateRequest(r *resource, u *step, id string, old, inputs prop
 	sent := inputs
 	for name := range u.edits {
 		key := target.Descriptor().Fields().ByName(name).JSONName()
-		if u == r.retry {
-			sent = sent.Delete(key)
-			continue
-		}
 		if edits, ok := inputs.GetOk(key); ok {
-			sent = sent.Set(key, newEdits(old.Get(key), edits))
+			sent = sent.Set(key, newEdits(state.Get(key), edits))
 		}
 	}
-	return request, s.api.setFields(target, sent, u.carries)
+	return request, setFields(target, sent, u.carries)
 }
 
-// newEdits are the edits of a list that its old value lacks, in their order.
-func newEdits(old, edits property.Value) property.Value {
-	if !old.IsArray() || !edits.IsArray() {
+// newEdits are the edits of a list that the edits made lack, in their order.
+func newEdits(made, edits property.Value) property.Value {
+	if !made.IsArray() || !edits.IsArray() {
 		return edits
 	}
 	var kept []property.Value
 	for _, edit := range edits.AsArray().All {
-		if !slices.ContainsFunc(old.AsArray().AsSlice(), func(made property.Value) bool { return made.Equals(edit) }) {
+		if !slices.ContainsFunc(made.AsArray().AsSlice(), func(done property.Value) bool { return done.Equals(edit) }) {
 			kept = append(kept, edit)
 		}
 	}
@@ -196,46 +222,40 @@ func (s *server) delete(ctx context.Context, req p.DeleteRequest) error {
 }
 
 func (s *server) invoke(ctx context.Context, req p.InvokeRequest) (p.InvokeResponse, error) {
-	f := s.api.functions[string(req.Token)]
-	if f == nil {
+	method := functions[string(req.Token)]
+	if method == nil {
 		return p.InvokeResponse{}, errors.New(string(req.Token) + ": no function of the provider")
 	}
-	request := newMessage(f.method.Input())
-	if err := s.api.fromMap(request, req.Args); err != nil {
+	request := newMessage(method.Input())
+	if err := fromMap(request, req.Args); err != nil {
 		return p.InvokeResponse{Failures: []p.CheckFailure{{Reason: err.Error()}}}, nil
 	}
-	response, err := s.client.call(ctx, f.method, request)
+	response, err := s.client.call(ctx, method, request)
 	if err != nil {
 		return p.InvokeResponse{}, err
 	}
-	return p.InvokeResponse{Return: s.api.toMap(response)}, nil
+	return p.InvokeResponse{Return: toMap(response)}, nil
 }
 
 // outputs are the resource's outputs: as the step's last response holds them, or else read.
 func (s *server) outputs(ctx context.Context, r *resource, id string, response protoreflect.Message) (property.Map, error) {
-	if outputs, ok := s.outputsOf(r, response); ok {
+	if outputs, ok := outputsOf(r, response); ok {
 		return outputs, nil
 	}
 	return s.readOutputs(ctx, r, id)
 }
 
-// outputsOf are the outputs a response holds as the read response does, in a field of the
-// holder's name and type, or in its own fields; false = it holds them otherwise, or not yet.
-func (s *server) outputsOf(r *resource, response protoreflect.Message) (property.Map, bool) {
+// outputsOf are the outputs a step's response holds as the read response does, in a field of the
+// holder's name; false = no step ran, or it holds them not yet.
+func outputsOf(r *resource, response protoreflect.Message) (property.Map, bool) {
 	if response == nil {
 		return property.Map{}, false
 	}
-	if r.holder != "" {
-		field := response.Descriptor().Fields().ByName(r.holder)
-		if field == nil || field.Message() != r.outputOf || !response.Has(field) {
-			return property.Map{}, false
-		}
-		response = response.Get(field).Message()
-	}
-	if response.Descriptor() != r.outputOf {
+	field := response.Descriptor().Fields().ByName(r.holder)
+	if !response.Has(field) {
 		return property.Map{}, false
 	}
-	return s.outputValues(r, response), true
+	return outputValues(r, response.Get(field).Message()), true
 }
 
 // readOutputs reads the resource by its id.
@@ -246,18 +266,15 @@ func (s *server) readOutputs(ctx context.Context, r *resource, id string) (prope
 	if err != nil {
 		return property.Map{}, err
 	}
-	if r.holder != "" {
-		response = response.Get(response.Descriptor().Fields().ByName(r.holder)).Message()
-	}
-	return s.outputValues(r, response), nil
+	return outputValues(r, response.Get(response.Descriptor().Fields().ByName(r.holder)).Message()), nil
 }
 
 // outputValues are the outputs that a message holding them has set.
-func (s *server) outputValues(r *resource, holder protoreflect.Message) property.Map {
+func outputValues(r *resource, holder protoreflect.Message) property.Map {
 	values := map[string]property.Value{}
 	for _, output := range r.outputs {
 		if holder.Has(output) {
-			values[output.JSONName()] = s.api.toProperty(output, holder.Get(output))
+			values[output.JSONName()] = toProperty(output, holder.Get(output))
 		}
 	}
 	return property.NewMap(values)

@@ -24,12 +24,8 @@ const Version = version
 
 // New is the provider, whose schema is the package's schema.json: what api.gen.go holds, as
 // Pulumi reads it.
-func New(schema string) (p.Provider, error) {
-	resolved, err := api.resolve()
-	if err != nil {
-		return p.Provider{}, fmt.Errorf("the provider's table: %w", err)
-	}
-	s := &server{api: resolved, schema: schema}
+func New(schema string) p.Provider {
+	s := &server{schema: schema}
 	return p.Provider{
 		GetSchema:   s.getSchema,
 		CheckConfig: s.checkConfig,
@@ -42,11 +38,10 @@ func New(schema string) (p.Provider, error) {
 		Update:      s.update,
 		Delete:      s.delete,
 		Invoke:      s.invoke,
-	}, nil
+	}
 }
 
 type server struct {
-	api    *resolved
 	schema string
 	client *client // Configure's.
 }
@@ -92,7 +87,7 @@ func (s *server) configure(_ context.Context, req p.ConfigureRequest) error {
 	if values["url"] == "" {
 		values["url"] = defaultURL
 	}
-	s.client = newClient(s.api.service, values["token"], values["url"])
+	s.client = newClient(service, values["token"], values["url"])
 	return nil
 }
 
@@ -113,7 +108,7 @@ func (s *server) check(_ context.Context, req p.CheckRequest) (p.CheckResponse, 
 	}
 	for key := range req.Inputs.AllStable {
 		if !inputs[key] && !strings.HasPrefix(key, "__") {
-			failures = append(failures, p.CheckFailure{Property: key, Reason: "no input of " + r.token})
+			failures = append(failures, p.CheckFailure{Property: key, Reason: "no input of " + string(req.Urn.Type())})
 		}
 	}
 	if id := req.Inputs.Get(r.id.JSONName()); !id.IsString() && !id.IsComputed() {
@@ -121,7 +116,7 @@ func (s *server) check(_ context.Context, req p.CheckRequest) (p.CheckResponse, 
 	}
 	if len(failures) == 0 && !req.Inputs.HasComputed() {
 		request := newMessage(r.create.method.Input())
-		if err := s.api.setFields(request, req.Inputs, names(r.inputs)); err != nil {
+		if err := setFields(request, req.Inputs, names(r.inputs)); err != nil {
 			failures = append(failures, p.CheckFailure{Reason: err.Error()})
 		}
 	}
@@ -181,7 +176,7 @@ func present(properties property.Map, field protoreflect.FieldDescriptor) bool {
 }
 
 func (s *server) resource(urn presource.URN) (*resource, error) {
-	r := s.api.resources[string(urn.Type())]
+	r := resources[string(urn.Type())]
 	if r == nil {
 		return nil, fmt.Errorf("%s: no resource of the provider", urn.Type())
 	}

@@ -2,8 +2,8 @@
 
 The [Pethost](https://pethost.dev) provider for [Pulumi](https://www.pulumi.com) lets a Pulumi
 program deploy and manage Pethost's projects and databases: a Docker Compose
-project from its files or from a GitHub repository, with its HTTPS address, and the Postgres and
-Valkey databases its apps use. It is the package `pethost` of the Pulumi Registry, in
+project from its files or from a GitHub repository, with its HTTPS address, and the Postgres,
+MariaDB or Valkey databases its apps use. It is the package `pethost` of the Pulumi Registry, in
 TypeScript, Python, Go, C#, Java and YAML.
 
 ## Install

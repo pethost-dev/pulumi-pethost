@@ -9,210 +9,53 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
-// What api.gen.go is made of: the API's names that the provider calls, as the proto writes them.
-// Each is found in the wire layer's descriptors when the provider starts (resolve), so a name
-// the API lacks stops it there, not at a call.
-type (
-	apiSpec struct {
-		file         protoreflect.FileDescriptor
-		service      string
-		wait         string // The RPC that waits for an operation's end; empty = none.
-		operation    operationSpec
-		resources    []resourceSpec
-		functions    []functionSpec
-		enumPrefixes map[string]string // An enum's full name → what each of its values' names starts with.
-	}
-	// operationSpec are the names an operation is read by: in the request that starts one (id,
-	// wait), in its response (field, violations, log) and in the Operation (status, failure,
-	// and the status's values without their prefix).
-	operationSpec struct {
-		id, wait, field, violations, log, status, failure, inProgress, succeeded string
-	}
-	resourceSpec struct {
-		token                string
-		id                   string   // The input that names it.
-		inputs, replaces     []string // The create request's fields; those whose change replaces it.
-		holder               string   // The read response's field whose message holds the outputs; empty = none.
-		outputs              []string // The holder's fields, or else the read response's.
-		create, read, delete stepSpec
-		updates              []stepSpec
-		retry                *stepSpec // nil = none: its create starts no operation.
-	}
-	stepSpec struct {
-		method  string
-		action  string   // The member of the request's oneof it sets; empty = none.
-		carries []string // An update's or a retry's: the inputs it sends.
-		edits   []string // Of those, the lists of edits, each sent with the edits its last value lacks.
-	}
-	functionSpec struct {
-		token, method string
-	}
-)
-
-// resource is a resource with its names found.
+// resource is a resource as the table, api.gen.go, has it.
 type resource struct {
-	token    string
 	id       protoreflect.FieldDescriptor   // Of the create request.
 	inputs   []protoreflect.FieldDescriptor // Of the create request.
-	replaces map[protoreflect.Name]bool
-	holder   protoreflect.Name              // Empty = the outputs are the response's own fields.
-	outputOf protoreflect.MessageDescriptor // The message whose fields the outputs are.
+	replaces map[protoreflect.Name]bool     // The inputs whose change replaces it.
+	holder   protoreflect.Name              // The field of a step's response whose message's fields the outputs are.
 	outputs  []protoreflect.FieldDescriptor
 	create   *step
 	read     *step
 	updates  []*step
 	delete   *step
-	retry    *step // nil = none.
+	retry    *step
 }
 
 // step is an RPC as a step of a resource's life.
 type step struct {
 	method  protoreflect.MethodDescriptor
-	action  protoreflect.FieldDescriptor // nil = it sets none.
-	carries []protoreflect.Name
-	edits   map[protoreflect.Name]bool
+	action  protoreflect.FieldDescriptor // The member of the request's oneof it sets; nil = none.
+	carries []protoreflect.Name          // An update's or a retry's: the inputs it sends.
+	edits   map[protoreflect.Name]bool   // Of those, the lists of edits, each sent with the edits its last value lacks.
 }
 
-// function is a read-only RPC as a function of the package.
-type function struct {
-	token  string
-	method protoreflect.MethodDescriptor
-}
+// rpc, fieldOf and fieldsOf find the table's names in the wire layer's descriptors, as the program
+// starts. Both come from one proto, so a name the API lacks is a provider built wrong.
 
-// resolved is the API with its names found.
-type resolved struct {
-	service      protoreflect.ServiceDescriptor
-	wait         protoreflect.MethodDescriptor // nil = none.
-	operation    operationSpec
-	resources    map[string]*resource // By token.
-	functions    map[string]*function // By token.
-	enumPrefixes map[string]string
-}
-
-func (spec apiSpec) resolve() (*resolved, error) {
-	service := spec.file.Services().ByName(protoreflect.Name(spec.service))
-	if service == nil {
-		return nil, fmt.Errorf("no service %s", spec.service)
-	}
-	api := &resolved{
-		service:      service,
-		operation:    spec.operation,
-		resources:    map[string]*resource{},
-		functions:    map[string]*function{},
-		enumPrefixes: spec.enumPrefixes,
-	}
-
-	var err error
-	if spec.wait != "" {
-		if api.wait, err = api.method(spec.wait); err != nil {
-			return nil, err
-		}
-	}
-	for _, r := range spec.resources {
-		if api.resources[r.token], err = api.resource(r); err != nil {
-			return nil, fmt.Errorf("%s: %w", r.token, err)
-		}
-	}
-	for _, f := range spec.functions {
-		method, err := api.method(f.method)
-		if err != nil {
-			return nil, err
-		}
-		api.functions[f.token] = &function{token: f.token, method: method}
-	}
-	return api, nil
-}
-
-func (api *resolved) resource(spec resourceSpec) (*resource, error) {
-	r := &resource{token: spec.token, replaces: map[protoreflect.Name]bool{}, holder: protoreflect.Name(spec.holder)}
-	steps := []struct {
-		spec stepSpec
-		to   **step
-	}{{spec.create, &r.create}, {spec.read, &r.read}, {spec.delete, &r.delete}}
-	for _, s := range steps {
-		resolved, err := api.step(s.spec)
-		if err != nil {
-			return nil, err
-		}
-		*s.to = resolved
-	}
-	for _, u := range spec.updates {
-		resolved, err := api.step(u)
-		if err != nil {
-			return nil, err
-		}
-		r.updates = append(r.updates, resolved)
-	}
-	if spec.retry != nil {
-		resolved, err := api.step(*spec.retry)
-		if err != nil {
-			return nil, err
-		}
-		r.retry = resolved
-	}
-
-	var err error
-	create := r.create.method.Input()
-	if r.inputs, err = fieldsOf(create, spec.inputs); err != nil {
-		return nil, err
-	}
-	outputs := r.read.method.Output()
-	if r.holder != "" {
-		holder := outputs.Fields().ByName(r.holder)
-		if holder == nil || holder.Message() == nil {
-			return nil, fmt.Errorf("%s holds no message %s", outputs.FullName(), r.holder)
-		}
-		outputs = holder.Message()
-	}
-	r.outputOf = outputs
-	if r.outputs, err = fieldsOf(outputs, spec.outputs); err != nil {
-		return nil, err
-	}
-	if r.id = create.Fields().ByName(protoreflect.Name(spec.id)); r.id == nil {
-		return nil, fmt.Errorf("%s has no %s", create.FullName(), spec.id)
-	}
-	for _, name := range spec.replaces {
-		r.replaces[protoreflect.Name(name)] = true
-	}
-	return r, nil
-}
-
-func (api *resolved) step(spec stepSpec) (*step, error) {
-	method, err := api.method(spec.method)
-	if err != nil {
-		return nil, err
-	}
-	s := &step{method: method, edits: map[protoreflect.Name]bool{}}
-	if spec.action != "" {
-		if s.action = method.Input().Fields().ByName(protoreflect.Name(spec.action)); s.action == nil {
-			return nil, fmt.Errorf("%s has no %s", method.Input().FullName(), spec.action)
-		}
-	}
-	for _, name := range spec.carries {
-		s.carries = append(s.carries, protoreflect.Name(name))
-	}
-	for _, name := range spec.edits {
-		s.edits[protoreflect.Name(name)] = true
-	}
-	return s, nil
-}
-
-func (api *resolved) method(name string) (protoreflect.MethodDescriptor, error) {
-	method := api.service.Methods().ByName(protoreflect.Name(name))
+func rpc(name protoreflect.Name) protoreflect.MethodDescriptor {
+	method := service.Methods().ByName(name)
 	if method == nil {
-		return nil, fmt.Errorf("no RPC %s", name)
+		panic(fmt.Sprintf("the wire layer has no RPC %s", name))
 	}
-	return method, nil
+	return method
 }
 
-func fieldsOf(message protoreflect.MessageDescriptor, names []string) ([]protoreflect.FieldDescriptor, error) {
+func fieldOf(message protoreflect.MessageDescriptor, name protoreflect.Name) protoreflect.FieldDescriptor {
+	field := message.Fields().ByName(name)
+	if field == nil {
+		panic(fmt.Sprintf("the wire layer's %s has no %s", message.FullName(), name))
+	}
+	return field
+}
+
+func fieldsOf(message protoreflect.MessageDescriptor, names ...protoreflect.Name) []protoreflect.FieldDescriptor {
 	fields := make([]protoreflect.FieldDescriptor, len(names))
 	for i, name := range names {
-		if fields[i] = message.Fields().ByName(protoreflect.Name(name)); fields[i] == nil {
-			return nil, fmt.Errorf("%s has no %s", message.FullName(), name)
-		}
+		fields[i] = fieldOf(message, name)
 	}
-	return fields, nil
+	return fields
 }
 
 // newMessage is an empty message of the type. The wire layer registers each message of its file

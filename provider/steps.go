@@ -25,14 +25,15 @@ func (e *refused) Error() string {
 	return fmt.Sprintf("%s refused it, and changed nothing:\n%s", e.method, strings.Join(e.violations, "\n"))
 }
 
-// operationFailed is an operation that ended other than as it should: how it ended, why, and the
-// last lines of its log.
+// operationFailed is an operation that ended other than as it should: how it ended, why, whether
+// it made its changes all the same, and the last lines of its log.
 type operationFailed struct {
-	method protoreflect.Name
-	id     string
-	status string
-	reason string
-	log    []string
+	method      protoreflect.Name
+	id          string
+	status      string
+	reason      string
+	madeCurrent bool
+	log         []string
 }
 
 func (e *operationFailed) Error() string {
@@ -72,20 +73,15 @@ func (e *unfinished) Unwrap() error {
 // the operation started, and the RPC that waits waits for it: a run's timeout then stops a wait,
 // with the operation known, and seldom the call that started it.
 func (s *server) run(ctx context.Context, st *step, request protoreflect.Message, id protoreflect.FieldDescriptor, value string) (protoreflect.Message, error) {
-	op := s.api.operation
 	fields := request.Descriptor().Fields()
-	if field := fields.ByName(protoreflect.Name(op.id)); field != nil {
-		request.Set(field, protoreflect.ValueOfString(newOperationID()))
-	}
-	if field := fields.ByName(protoreflect.Name(op.wait)); field != nil {
-		request.Set(field, protoreflect.ValueOfUint32(0))
-	}
+	request.Set(fields.ByName(operationIDField), protoreflect.ValueOfString(newOperationID()))
+	request.Set(fields.ByName(waitField), protoreflect.ValueOfUint32(0))
 
 	response, err := s.client.call(ctx, st.method, request)
 	if err != nil {
 		return nil, err
 	}
-	if violations := s.lines(response, op.violations); len(violations) > 0 {
+	if violations := s.lines(response, violationsField); len(violations) > 0 {
 		return nil, &refused{method: st.method.Name(), violations: violations}
 	}
 	return s.settle(ctx, st.method.Name(), response, id, value)
@@ -94,22 +90,21 @@ func (s *server) run(ctx context.Context, st *step, request protoreflect.Message
 // settle waits while the response's operation is in progress, and answers with the response that
 // saw it end; a response that names no operation is the step's end.
 func (s *server) settle(ctx context.Context, method protoreflect.Name, response protoreflect.Message, id protoreflect.FieldDescriptor, value string) (protoreflect.Message, error) {
-	op := s.api.operation
 	for {
-		field := response.Descriptor().Fields().ByName(protoreflect.Name(op.field))
-		if field == nil || !response.Has(field) {
+		field := response.Descriptor().Fields().ByName(operationField)
+		if !response.Has(field) {
 			return response, nil
 		}
 		operation := response.Get(field).Message()
 		fields := operation.Descriptor().Fields()
-		status := fields.ByName(protoreflect.Name(op.status))
-		ended := s.api.enumName(status.Enum(), operation.Get(status).Enum())
-		operationID := operation.Get(fields.ByName(protoreflect.Name(op.id))).String()
+		status := fields.ByName(statusField)
+		ended := enumName(status.Enum(), operation.Get(status).Enum())
+		operationID := operation.Get(fields.ByName(operationIDField)).String()
 
 		switch ended {
-		case op.succeeded:
+		case succeeded:
 			return response, nil
-		case op.inProgress:
+		case inProgress:
 			p.GetLogger(ctx).InfoStatusf("%s: operation %s is in progress", method, operationID)
 			next, err := s.wait(ctx, id, value, operationID)
 			if err != nil {
@@ -119,11 +114,12 @@ func (s *server) settle(ctx context.Context, method protoreflect.Name, response 
 			continue
 		}
 		return response, &operationFailed{
-			method: method,
-			id:     operationID,
-			status: ended,
-			reason: operation.Get(fields.ByName(protoreflect.Name(op.failure))).String(),
-			log:    s.lines(response, op.log),
+			method:      method,
+			id:          operationID,
+			status:      ended,
+			reason:      operation.Get(fields.ByName(failureField)).String(),
+			madeCurrent: operation.Get(fields.ByName(madeCurrentField)).Bool(),
+			log:         s.lines(response, logField),
 		}
 	}
 }
@@ -131,17 +127,17 @@ func (s *server) settle(ctx context.Context, method protoreflect.Name, response 
 // wait asks the RPC that waits for the operation's end, which answers once it ended or after a
 // while, and then again.
 func (s *server) wait(ctx context.Context, id protoreflect.FieldDescriptor, value, operationID string) (protoreflect.Message, error) {
-	request := newMessage(s.api.wait.Input())
+	request := newMessage(waitRPC.Input())
 	fields := request.Descriptor().Fields()
 	request.Set(fields.ByName(id.Name()), protoreflect.ValueOfString(value))
-	request.Set(fields.ByName(protoreflect.Name(s.api.operation.id)), protoreflect.ValueOfString(operationID))
-	return s.client.call(ctx, s.api.wait, request)
+	request.Set(fields.ByName(operationIDField), protoreflect.ValueOfString(operationID))
+	return s.client.call(ctx, waitRPC, request)
 }
 
 // lines are the messages of a response's list, each as its text fields that are set, joined:
 // a violation's service, location and message, a log line's text.
-func (s *server) lines(response protoreflect.Message, name string) []string {
-	field := response.Descriptor().Fields().ByName(protoreflect.Name(name))
+func (s *server) lines(response protoreflect.Message, name protoreflect.Name) []string {
+	field := response.Descriptor().Fields().ByName(name)
 	if field == nil {
 		return nil
 	}

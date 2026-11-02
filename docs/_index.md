@@ -1,10 +1,10 @@
 ---
 title: Pethost
-meta_desc: Use the Pulumi Pethost provider to deploy Docker Compose projects and their Postgres and Valkey databases on Pethost.
+meta_desc: Use the Pulumi Pethost provider to deploy Docker Compose projects and their Postgres, MariaDB or Valkey databases on Pethost.
 layout: package
 ---
 
-The Pethost provider for Pulumi lets you manage [Pethost](https://pethost.dev/) resources (projects and databases) as part of your Pulumi programs: a Docker Compose project deployed from its files or from a GitHub repository, with its HTTPS address, and the Postgres and Valkey databases its apps use. Pethost is managed hosting for Docker Compose projects: a plan has a set size in CPU, memory and disk, at one flat price, for as many projects as fit.
+The Pethost provider for Pulumi lets you manage [Pethost](https://pethost.dev/) resources (projects and databases) as part of your Pulumi programs: a Docker Compose project deployed from its files or from a GitHub repository, with its HTTPS address, and the Postgres, MariaDB or Valkey databases its apps use. Pethost is managed hosting for Docker Compose projects: a plan has a set size in CPU, memory and disk, at one flat price, for as many projects as fit.
 
 ## Installation
 
@@ -60,7 +60,7 @@ terraform {
   required_providers {
     pethost = {
       source  = "pulumi/pethost"
-      version = "0.1.0"
+      version = "0.1.1"
     }
   }
 }

@@ -2,92 +2,85 @@
 
 package provider
 
-import panelv1 "github.com/pethost-dev/pulumi-pethost/provider/internal/panelv1"
+import (
+	panelv1 "github.com/pethost-dev/pulumi-pethost/provider/internal/panelv1"
+	"google.golang.org/protobuf/reflect/protoreflect"
+)
 
 // version is the release the provider is, as its schema says.
-const version = "0.1.0"
+const version = "0.1.1"
 
 // userAgent says on every call which client calls, and of which release.
-const userAgent = "pulumi-pethost/0.1.0"
+const userAgent = "pulumi-pethost/0.1.1"
 
 // defaultURL is where the API is served when the provider's configuration names no other.
 const defaultURL = "https://console.pethost.dev"
 
-// api is what the provider calls, by the names of v1/panel.proto.
-var api = apiSpec{
-	file:    panelv1.File_v1_panel_proto,
-	service: "PanelService",
-	wait:    "GetOperation",
-	operation: operationSpec{
-		id:         "operation_id",
-		wait:       "wait_seconds",
-		field:      "operation",
-		violations: "violations",
-		log:        "log",
-		status:     "status",
-		failure:    "failure_message",
-		inProgress: "IN_PROGRESS",
-		succeeded:  "SUCCEEDED",
-	},
-	resources: []resourceSpec{
-		{
-			token:    "pethost:index:Project",
-			id:       "project_id",
-			inputs:   []string{"project_id", "source", "files", "x_pethost", "timeout_seconds", "link_databases"},
-			replaces: []string{"project_id", "source", "link_databases"},
-			holder:   "project",
-			outputs:  []string{"metadata", "problems", "url", "cpu_used_cores", "memory_used_bytes", "deploy_id", "deploy_status", "deploy_time", "x_pethost_applies_at_once", "services", "volumes", "routes", "hosts", "password_protected", "operations", "snapshots", "snapshot_count", "snapshot_list_time", "http_traffic_last_day", "running_services_action", "alerts", "incidents", "more_incidents", "uptime_days", "database", "linked_databases"},
-			create:   stepSpec{method: "CreateProject"},
-			read:     stepSpec{method: "GetProject"},
-			updates: []stepSpec{
-				{method: "DeployProject", carries: []string{"files", "x_pethost", "timeout_seconds"}, edits: []string{"files"}},
-			},
-			delete: stepSpec{method: "RunProjectAction", action: "delete_project"},
-			retry:  &stepSpec{method: "DeployProject", carries: []string{"files", "x_pethost", "timeout_seconds"}, edits: []string{"files"}},
+// The names an operation is read by: in the request that starts one (operationIDField,
+// waitField), in its response (operationField, violationsField, logField) and in the Operation
+// (operationIDField, statusField, failureField, madeCurrentField).
+const (
+	operationIDField protoreflect.Name = "operation_id"
+	waitField        protoreflect.Name = "wait_seconds"
+	operationField   protoreflect.Name = "operation"
+	violationsField  protoreflect.Name = "violations"
+	logField         protoreflect.Name = "log"
+	statusField      protoreflect.Name = "status"
+	failureField     protoreflect.Name = "failure_message"
+	madeCurrentField protoreflect.Name = "made_current"
+)
+
+// The values of an Operation's status the provider tells apart, without their prefix.
+const (
+	inProgress = "IN_PROGRESS"
+	succeeded  = "SUCCEEDED"
+)
+
+// service is the API the provider calls, v1/panel.proto.
+var service = panelv1.File_v1_panel_proto.Services().ByName("PanelService")
+
+// waitRPC is the RPC that waits for an operation's end.
+var waitRPC = rpc("GetOperation")
+
+// resources are the provider's resources, by token.
+var resources = map[string]*resource{
+	"pethost:index:Project": {
+		id:       fieldOf(rpc("CreateProject").Input(), "project_id"),
+		inputs:   fieldsOf(rpc("CreateProject").Input(), "project_id", "source", "files", "x_pethost", "timeout_seconds", "link_databases"),
+		replaces: map[protoreflect.Name]bool{"project_id": true, "source": true, "link_databases": true},
+		holder:   "project",
+		outputs:  fieldsOf(fieldOf(rpc("GetProject").Output(), "project").Message(), "metadata", "problems", "url", "cpu_used_cores", "memory_used_bytes", "deploy_id", "deploy_status", "deploy_time", "x_pethost_applies_at_once", "services", "volumes", "routes", "hosts", "password_protected", "operations", "snapshots", "snapshot_count", "snapshot_list_time", "http_traffic_last_day", "running_services_action", "alerts", "incidents", "more_incidents", "uptime_days", "database", "linked_databases"),
+		create:   &step{method: rpc("CreateProject")},
+		read:     &step{method: rpc("GetProject")},
+		updates: []*step{
+			&step{method: rpc("DeployProject"), carries: []protoreflect.Name{"files", "x_pethost", "timeout_seconds"}, edits: map[protoreflect.Name]bool{"files": true}},
 		},
-		{
-			token:    "pethost:index:Database",
-			id:       "project_id",
-			inputs:   []string{"project_id", "engine", "memory_limit_bytes", "from_snapshot_id"},
-			replaces: []string{"project_id", "engine", "from_snapshot_id"},
-			holder:   "project",
-			outputs:  []string{"metadata", "problems", "url", "cpu_used_cores", "memory_used_bytes", "deploy_id", "deploy_status", "deploy_time", "x_pethost_applies_at_once", "services", "volumes", "routes", "hosts", "password_protected", "operations", "snapshots", "snapshot_count", "snapshot_list_time", "http_traffic_last_day", "source", "running_services_action", "alerts", "incidents", "more_incidents", "uptime_days", "database", "linked_databases"},
-			create:   stepSpec{method: "CreateDatabase"},
-			read:     stepSpec{method: "GetProject"},
-			updates: []stepSpec{
-				{method: "RunProjectAction", action: "set_database_size", carries: []string{"memory_limit_bytes"}},
-			},
-			delete: stepSpec{method: "RunProjectAction", action: "delete_project"},
-			retry:  &stepSpec{method: "DeployProject"},
+		delete: &step{method: rpc("RunProjectAction"), action: fieldOf(rpc("RunProjectAction").Input(), "delete_project")},
+		retry:  &step{method: rpc("DeployProject"), carries: []protoreflect.Name{"x_pethost", "timeout_seconds"}},
+	},
+	"pethost:index:Database": {
+		id:       fieldOf(rpc("CreateDatabase").Input(), "project_id"),
+		inputs:   fieldsOf(rpc("CreateDatabase").Input(), "project_id", "engine", "memory_limit_bytes", "from_snapshot_id"),
+		replaces: map[protoreflect.Name]bool{"project_id": true, "engine": true, "from_snapshot_id": true},
+		holder:   "project",
+		outputs:  fieldsOf(fieldOf(rpc("GetProject").Output(), "project").Message(), "metadata", "problems", "url", "cpu_used_cores", "memory_used_bytes", "deploy_id", "deploy_status", "deploy_time", "x_pethost_applies_at_once", "services", "volumes", "routes", "hosts", "password_protected", "operations", "snapshots", "snapshot_count", "snapshot_list_time", "http_traffic_last_day", "source", "running_services_action", "alerts", "incidents", "more_incidents", "uptime_days", "database", "linked_databases"),
+		create:   &step{method: rpc("CreateDatabase")},
+		read:     &step{method: rpc("GetProject")},
+		updates: []*step{
+			&step{method: rpc("RunProjectAction"), action: fieldOf(rpc("RunProjectAction").Input(), "set_database_size"), carries: []protoreflect.Name{"memory_limit_bytes"}},
 		},
+		delete: &step{method: rpc("RunProjectAction"), action: fieldOf(rpc("RunProjectAction").Input(), "delete_project")},
+		retry:  &step{method: rpc("DeployProject")},
 	},
-	functions: []functionSpec{
-		{token: "pethost:index:getMachine", method: "GetMachine"},
-		{token: "pethost:index:getProject", method: "GetProject"},
-		{token: "pethost:index:listCommits", method: "ListCommits"},
-		{token: "pethost:index:getOperation", method: "GetOperation"},
-		{token: "pethost:index:queryHttpTraffic", method: "QueryHttpTraffic"},
-		{token: "pethost:index:queryContainerLogs", method: "QueryContainerLogs"},
-		{token: "pethost:index:readPath", method: "ReadPath"},
-	},
-	enumPrefixes: map[string]string{
-		"pethost.panel.v1.AlertChannelKind":    "ALERT_CHANNEL_KIND_",
-		"pethost.panel.v1.MachineSessionKind":  "MACHINE_SESSION_KIND_",
-		"pethost.panel.v1.ProjectProblemKind":  "PROJECT_PROBLEM_KIND_",
-		"pethost.panel.v1.ServicesActionKind":  "SERVICES_ACTION_KIND_",
-		"pethost.panel.v1.ServiceState":        "SERVICE_STATE_",
-		"pethost.panel.v1.RestartPolicy":       "RESTART_POLICY_",
-		"pethost.panel.v1.HealthStatus":        "HEALTH_STATUS_",
-		"pethost.panel.v1.CertificateSource":   "CERTIFICATE_SOURCE_",
-		"pethost.panel.v1.OperationKind":       "OPERATION_KIND_",
-		"pethost.panel.v1.OperationStatus":     "OPERATION_STATUS_",
-		"pethost.panel.v1.DeployFailureReason": "DEPLOY_FAILURE_REASON_",
-		"pethost.panel.v1.DatabaseEngine":      "DATABASE_ENGINE_",
-		"pethost.panel.v1.TrafficMetric":       "TRAFFIC_METRIC_",
-		"pethost.panel.v1.AlertStatus":         "ALERT_STATUS_",
-		"pethost.panel.v1.IncidentQuietReason": "INCIDENT_QUIET_REASON_",
-		"pethost.panel.v1.OutputStream":        "OUTPUT_STREAM_",
-		"pethost.panel.v1.FileType":            "FILE_TYPE_",
-		"pethost.panel.v1.FileLocation":        "FILE_LOCATION_",
-	},
+}
+
+// functions are the read-only RPCs that are the provider's functions, by token.
+var functions = map[string]protoreflect.MethodDescriptor{
+	"pethost:index:getMachine":         rpc("GetMachine"),
+	"pethost:index:getProject":         rpc("GetProject"),
+	"pethost:index:listCommits":        rpc("ListCommits"),
+	"pethost:index:getOperation":       rpc("GetOperation"),
+	"pethost:index:queryHttpTraffic":   rpc("QueryHttpTraffic"),
+	"pethost:index:queryContainerLogs": rpc("QueryContainerLogs"),
+	"pethost:index:readPath":           rpc("ReadPath"),
 }

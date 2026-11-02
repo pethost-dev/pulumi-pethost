@@ -26,7 +26,7 @@ import (
 const timestamp = "google.protobuf.Timestamp"
 
 // setFields sets, of message's fields named, those that properties hold under their JSON names.
-func (api *resolved) setFields(message protoreflect.Message, properties property.Map, names []protoreflect.Name) error {
+func setFields(message protoreflect.Message, properties property.Map, names []protoreflect.Name) error {
 	fields := message.Descriptor().Fields()
 	for _, name := range names {
 		field := fields.ByName(name)
@@ -34,7 +34,7 @@ func (api *resolved) setFields(message protoreflect.Message, properties property
 		if !ok || value.IsNull() {
 			continue
 		}
-		if err := api.setField(message, field, value); err != nil {
+		if err := setField(message, field, value); err != nil {
 			return fmt.Errorf("%s: %w", field.JSONName(), err)
 		}
 	}
@@ -42,7 +42,7 @@ func (api *resolved) setFields(message protoreflect.Message, properties property
 }
 
 // fromMap sets message's fields from every property: each must name one.
-func (api *resolved) fromMap(message protoreflect.Message, properties property.Map) error {
+func fromMap(message protoreflect.Message, properties property.Map) error {
 	fields := message.Descriptor().Fields()
 	for key, value := range properties.AllStable {
 		field := fields.ByJSONName(key)
@@ -52,14 +52,14 @@ func (api *resolved) fromMap(message protoreflect.Message, properties property.M
 		if value.IsNull() {
 			continue
 		}
-		if err := api.setField(message, field, value); err != nil {
+		if err := setField(message, field, value); err != nil {
 			return fmt.Errorf("%s: %w", key, err)
 		}
 	}
 	return nil
 }
 
-func (api *resolved) setField(message protoreflect.Message, field protoreflect.FieldDescriptor, value property.Value) error {
+func setField(message protoreflect.Message, field protoreflect.FieldDescriptor, value property.Value) error {
 	if value.IsComputed() {
 		return errors.New("not known yet")
 	}
@@ -70,7 +70,7 @@ func (api *resolved) setField(message protoreflect.Message, field protoreflect.F
 	}
 
 	if !field.IsList() {
-		converted, err := api.valueOf(field, value, func() protoreflect.Message { return message.NewField(field).Message() })
+		converted, err := valueOf(field, value, func() protoreflect.Message { return message.NewField(field).Message() })
 		if err != nil {
 			return err
 		}
@@ -83,7 +83,7 @@ func (api *resolved) setField(message protoreflect.Message, field protoreflect.F
 	}
 	list := message.Mutable(field).List()
 	for i, element := range value.AsArray().All {
-		converted, err := api.valueOf(field, element, func() protoreflect.Message { return list.NewElement().Message() })
+		converted, err := valueOf(field, element, func() protoreflect.Message { return list.NewElement().Message() })
 		if err != nil {
 			return fmt.Errorf("[%d]: %w", i, err)
 		}
@@ -93,7 +93,7 @@ func (api *resolved) setField(message protoreflect.Message, field protoreflect.F
 }
 
 // valueOf is one value of the field's kind; fresh makes the message a message-typed field holds.
-func (api *resolved) valueOf(field protoreflect.FieldDescriptor, value property.Value, fresh func() protoreflect.Message) (protoreflect.Value, error) {
+func valueOf(field protoreflect.FieldDescriptor, value property.Value, fresh func() protoreflect.Message) (protoreflect.Value, error) {
 	switch {
 	case value.IsComputed():
 		return protoreflect.Value{}, errors.New("not known yet")
@@ -104,9 +104,9 @@ func (api *resolved) valueOf(field protoreflect.FieldDescriptor, value property.
 			return protoreflect.Value{}, errors.New("not an object")
 		}
 		message := fresh()
-		return protoreflect.ValueOfMessage(message), api.fromMap(message, value.AsMap())
+		return protoreflect.ValueOfMessage(message), fromMap(message, value.AsMap())
 	case field.Enum() != nil:
-		return api.enumOf(field.Enum(), value)
+		return enumOf(field.Enum(), value)
 	}
 
 	switch field.Kind() {
@@ -167,13 +167,11 @@ func integerOf(kind protoreflect.Kind, value property.Value) (protoreflect.Value
 		return protoreflect.ValueOfUint32(uint32(number)), nil
 	case protoreflect.Int64Kind, protoreflect.Sint64Kind, protoreflect.Sfixed64Kind:
 		return protoreflect.ValueOfInt64(int64(number)), nil
-	case protoreflect.Uint64Kind, protoreflect.Fixed64Kind:
+	default: // Uint64Kind and Fixed64Kind: valueOf has taken every other kind.
 		if number < 0 {
 			break
 		}
 		return protoreflect.ValueOfUint64(uint64(number)), nil
-	default:
-		return protoreflect.Value{}, fmt.Errorf("a field of kind %v, which the provider has no rule for", kind)
 	}
 	return protoreflect.Value{}, fmt.Errorf("%v is out of the range of a %v", number, kind)
 }
@@ -194,8 +192,8 @@ func timeOf(value property.Value, message protoreflect.Message) (protoreflect.Va
 }
 
 // enumOf is a value's name, without the enum's prefix, as its number.
-func (api *resolved) enumOf(enum protoreflect.EnumDescriptor, value property.Value) (protoreflect.Value, error) {
-	prefix := api.enumPrefixes[string(enum.FullName())]
+func enumOf(enum protoreflect.EnumDescriptor, value property.Value) (protoreflect.Value, error) {
+	prefix := enumPrefix(enum)
 	if value.IsString() {
 		if known := enum.Values().ByName(protoreflect.Name(prefix + value.AsString())); known != nil && known.Number() != 0 {
 			return protoreflect.ValueOfEnum(known.Number()), nil
@@ -210,20 +208,20 @@ func (api *resolved) enumOf(enum protoreflect.EnumDescriptor, value property.Val
 }
 
 // toMap is a message's fields that are set, as properties.
-func (api *resolved) toMap(message protoreflect.Message) property.Map {
+func toMap(message protoreflect.Message) property.Map {
 	values := map[string]property.Value{}
 	message.Range(func(field protoreflect.FieldDescriptor, value protoreflect.Value) bool {
-		values[field.JSONName()] = api.toProperty(field, value)
+		values[field.JSONName()] = toProperty(field, value)
 		return true
 	})
 	return property.NewMap(values)
 }
 
 // toProperty is a field's value as a property, a secret if the field holds one.
-func (api *resolved) toProperty(field protoreflect.FieldDescriptor, value protoreflect.Value) property.Value {
-	converted := api.elementToProperty
+func toProperty(field protoreflect.FieldDescriptor, value protoreflect.Value) property.Value {
+	converted := elementToProperty
 	if field.IsList() {
-		converted = api.listToProperty
+		converted = listToProperty
 	}
 	if secret(field) {
 		return converted(field, value).WithSecret(true)
@@ -231,16 +229,16 @@ func (api *resolved) toProperty(field protoreflect.FieldDescriptor, value protor
 	return converted(field, value)
 }
 
-func (api *resolved) listToProperty(field protoreflect.FieldDescriptor, value protoreflect.Value) property.Value {
+func listToProperty(field protoreflect.FieldDescriptor, value protoreflect.Value) property.Value {
 	list := value.List()
 	elements := make([]property.Value, list.Len())
 	for i := range elements {
-		elements[i] = api.elementToProperty(field, list.Get(i))
+		elements[i] = elementToProperty(field, list.Get(i))
 	}
 	return property.New(elements)
 }
 
-func (api *resolved) elementToProperty(field protoreflect.FieldDescriptor, value protoreflect.Value) property.Value {
+func elementToProperty(field protoreflect.FieldDescriptor, value protoreflect.Value) property.Value {
 	switch {
 	case field.Message() != nil && field.Message().FullName() == timestamp:
 		fields := field.Message().Fields()
@@ -248,9 +246,9 @@ func (api *resolved) elementToProperty(field protoreflect.FieldDescriptor, value
 		nanos := value.Message().Get(fields.ByName("nanos")).Int()
 		return property.New(time.Unix(seconds, nanos).UTC().Format(time.RFC3339Nano))
 	case field.Message() != nil:
-		return property.New(api.toMap(value.Message()))
+		return property.New(toMap(value.Message()))
 	case field.Enum() != nil:
-		return property.New(api.enumName(field.Enum(), value.Enum()))
+		return property.New(enumName(field.Enum(), value.Enum()))
 	}
 
 	switch field.Kind() {
@@ -314,10 +312,16 @@ func secret(field protoreflect.FieldDescriptor) bool {
 
 // enumName is a value's name without the enum's prefix; one newer than the provider is its
 // number.
-func (api *resolved) enumName(enum protoreflect.EnumDescriptor, number protoreflect.EnumNumber) string {
+func enumName(enum protoreflect.EnumDescriptor, number protoreflect.EnumNumber) string {
 	known := enum.Values().ByNumber(number)
 	if known == nil {
 		return strconv.Itoa(int(number))
 	}
-	return strings.TrimPrefix(string(known.Name()), api.enumPrefixes[string(enum.FullName())])
+	return strings.TrimPrefix(string(known.Name()), enumPrefix(enum))
+}
+
+// enumPrefix is what each of an enum's values' names starts with: its value 0 is
+// <prefix>UNSPECIFIED, as the generator holds every enum of the API to.
+func enumPrefix(enum protoreflect.EnumDescriptor) string {
+	return strings.TrimSuffix(string(enum.Values().Get(0).Name()), "UNSPECIFIED")
 }
