@@ -60,7 +60,7 @@ terraform {
   required_providers {
     pethost = {
       source  = "pulumi/pethost"
-      version = "0.1.1"
+      version = "0.1.2"
     }
   }
 }

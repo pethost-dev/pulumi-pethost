@@ -1,7 +1,7 @@
 {
   "name": "pethost",
   "displayName": "Pethost",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Manage Pethost's projects and databases as code.",
   "keywords": [
     "pulumi",
@@ -486,7 +486,7 @@
           },
           "github": {
             "$ref": "#/types/pethost:index:GithubConnection",
-            "description": "The panel's GitHub App, one for every account: projects are created from the repositories of the account's own installations of it."
+            "description": "The panel's GitHub App, one for every account: projects are created from the repositories of the installations of it the account connected, on the person's own GitHub account or on an organization's; of an organization's, only those the person who connected it can read on GitHub now."
           },
           "machine": {
             "$ref": "#/types/pethost:index:Machine"
@@ -1481,7 +1481,7 @@
     },
     "pethost:index:GithubConnection": {
       "type": "object",
-      "description": "The panel's GitHub App, one for every account: projects are created from the repositories of the account's own installations of it. Absent = GitHub is not set up on this panel.",
+      "description": "The panel's GitHub App, one for every account: projects are created from the repositories of the installations of it the account connected, on the person's own GitHub account or on an organization's; of an organization's, only those the person who connected it can read on GitHub now. Absent = GitHub is not set up on this panel.",
       "properties": {
         "appName": {
           "type": "string",
@@ -1489,7 +1489,7 @@
         },
         "installUrl": {
           "type": "string",
-          "description": "The panel's page that sends a signed-in person to GitHub to install the app on their repositories, or to change which."
+          "description": "The panel's page that sends a signed-in person to GitHub to install the app on their repositories or their organization's, or to change which. On the way it connects every installation GitHub lists for them, such as one an owner of their organization made."
         },
         "repositories": {
           "type": "array",

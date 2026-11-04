@@ -8,10 +8,10 @@ import (
 )
 
 // version is the release the provider is, as its schema says.
-const version = "0.1.1"
+const version = "0.1.2"
 
 // userAgent says on every call which client calls, and of which release.
-const userAgent = "pulumi-pethost/0.1.1"
+const userAgent = "pulumi-pethost/0.1.2"
 
 // defaultURL is where the API is served when the provider's configuration names no other.
 const defaultURL = "https://console.pethost.dev"
