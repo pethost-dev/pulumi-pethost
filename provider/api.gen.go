@@ -8,10 +8,10 @@ import (
 )
 
 // version is the release the provider is, as its schema says.
-const version = "0.1.2"
+const version = "0.2.0"
 
 // userAgent says on every call which client calls, and of which release.
-const userAgent = "pulumi-pethost/0.1.2"
+const userAgent = "pulumi-pethost/0.2.0"
 
 // defaultURL is where the API is served when the provider's configuration names no other.
 const defaultURL = "https://console.pethost.dev"
@@ -30,6 +30,19 @@ const (
 	madeCurrentField protoreflect.Name = "made_current"
 )
 
+// workspaceField is a request's field that names the workspace the call acts on, by id or name;
+// moveRPC is the RPC that moves a project to another, which no step of a resource is; and
+// movedToField is the field of movedDetail that says where a moved resource went.
+const (
+	workspaceField protoreflect.Name = "workspace"
+	moveRPC                          = "MoveProject"
+	movedToField   protoreflect.Name = "workspace_id"
+)
+
+// movedDetail is the error detail of a call to a workspace a resource moved out of; nil = the API
+// has none, and no resource is made in a workspace.
+var movedDetail = service.ParentFile().Messages().ByName("ProjectMoved")
+
 // The values of an Operation's status the provider tells apart, without their prefix.
 const (
 	inProgress = "IN_PROGRESS"
@@ -45,13 +58,16 @@ var waitRPC = rpc("GetOperation")
 // resources are the provider's resources, by token.
 var resources = map[string]*resource{
 	"pethost:index:Project": {
-		id:       fieldOf(rpc("CreateProject").Input(), "project_id"),
-		inputs:   fieldsOf(rpc("CreateProject").Input(), "project_id", "source", "files", "x_pethost", "timeout_seconds", "link_databases"),
-		replaces: map[protoreflect.Name]bool{"project_id": true, "source": true, "link_databases": true},
-		holder:   "project",
-		outputs:  fieldsOf(fieldOf(rpc("GetProject").Output(), "project").Message(), "metadata", "problems", "url", "cpu_used_cores", "memory_used_bytes", "deploy_id", "deploy_status", "deploy_time", "x_pethost_applies_at_once", "services", "volumes", "routes", "hosts", "password_protected", "operations", "snapshots", "snapshot_count", "snapshot_list_time", "http_traffic_last_day", "running_services_action", "alerts", "incidents", "more_incidents", "uptime_days", "database", "linked_databases"),
-		create:   &step{method: rpc("CreateProject")},
-		read:     &step{method: rpc("GetProject")},
+		id:        fieldOf(rpc("CreateProject").Input(), "project_id"),
+		inputs:    fieldsOf(rpc("CreateProject").Input(), "project_id", "source", "files", "x_pethost", "timeout_seconds", "link_databases", "workspace"),
+		replaces:  map[protoreflect.Name]bool{"project_id": true, "source": true, "link_databases": true},
+		holder:    "project",
+		outputs:   fieldsOf(fieldOf(rpc("GetProject").Output(), "project").Message(), "metadata", "problems", "url", "cpu_used_cores", "memory_used_bytes", "deploy_id", "deploy_status", "deploy_time", "x_pethost_applies_at_once", "services", "volumes", "routes", "hosts", "password_protected", "operations", "snapshots", "snapshot_count", "snapshot_list_time", "http_traffic_last_day", "running_services_action", "alerts", "incidents", "more_incidents", "uptime_days", "database", "linked_databases", "workspace_id", "uid", "dependencies"),
+		workspace: fieldOf(rpc("CreateProject").Input(), "workspace"),
+		located:   fieldOf(fieldOf(rpc("GetProject").Output(), "project").Message(), "workspace_id"),
+		same:      fieldOf(fieldOf(rpc("GetProject").Output(), "project").Message(), "uid"),
+		create:    &step{method: rpc("CreateProject")},
+		read:      &step{method: rpc("GetProject")},
 		updates: []*step{
 			&step{method: rpc("DeployProject"), carries: []protoreflect.Name{"files", "x_pethost", "timeout_seconds"}, edits: map[protoreflect.Name]bool{"files": true}},
 		},
@@ -59,13 +75,16 @@ var resources = map[string]*resource{
 		retry:  &step{method: rpc("DeployProject"), carries: []protoreflect.Name{"x_pethost", "timeout_seconds"}},
 	},
 	"pethost:index:Database": {
-		id:       fieldOf(rpc("CreateDatabase").Input(), "project_id"),
-		inputs:   fieldsOf(rpc("CreateDatabase").Input(), "project_id", "engine", "memory_limit_bytes", "from_snapshot_id"),
-		replaces: map[protoreflect.Name]bool{"project_id": true, "engine": true, "from_snapshot_id": true},
-		holder:   "project",
-		outputs:  fieldsOf(fieldOf(rpc("GetProject").Output(), "project").Message(), "metadata", "problems", "url", "cpu_used_cores", "memory_used_bytes", "deploy_id", "deploy_status", "deploy_time", "x_pethost_applies_at_once", "services", "volumes", "routes", "hosts", "password_protected", "operations", "snapshots", "snapshot_count", "snapshot_list_time", "http_traffic_last_day", "source", "running_services_action", "alerts", "incidents", "more_incidents", "uptime_days", "database", "linked_databases"),
-		create:   &step{method: rpc("CreateDatabase")},
-		read:     &step{method: rpc("GetProject")},
+		id:        fieldOf(rpc("CreateDatabase").Input(), "project_id"),
+		inputs:    fieldsOf(rpc("CreateDatabase").Input(), "project_id", "engine", "memory_limit_bytes", "from_snapshot_id", "workspace"),
+		replaces:  map[protoreflect.Name]bool{"project_id": true, "engine": true, "from_snapshot_id": true},
+		holder:    "project",
+		outputs:   fieldsOf(fieldOf(rpc("GetProject").Output(), "project").Message(), "metadata", "problems", "url", "cpu_used_cores", "memory_used_bytes", "deploy_id", "deploy_status", "deploy_time", "x_pethost_applies_at_once", "services", "volumes", "routes", "hosts", "password_protected", "operations", "snapshots", "snapshot_count", "snapshot_list_time", "http_traffic_last_day", "source", "running_services_action", "alerts", "incidents", "more_incidents", "uptime_days", "database", "linked_databases", "workspace_id", "uid", "dependencies"),
+		workspace: fieldOf(rpc("CreateDatabase").Input(), "workspace"),
+		located:   fieldOf(fieldOf(rpc("GetProject").Output(), "project").Message(), "workspace_id"),
+		same:      fieldOf(fieldOf(rpc("GetProject").Output(), "project").Message(), "uid"),
+		create:    &step{method: rpc("CreateDatabase")},
+		read:      &step{method: rpc("GetProject")},
 		updates: []*step{
 			&step{method: rpc("RunProjectAction"), action: fieldOf(rpc("RunProjectAction").Input(), "set_database_size"), carries: []protoreflect.Name{"memory_limit_bytes"}},
 		},
@@ -76,6 +95,7 @@ var resources = map[string]*resource{
 
 // functions are the read-only RPCs that are the provider's functions, by token.
 var functions = map[string]protoreflect.MethodDescriptor{
+	"pethost:index:listWorkspaces":     rpc("ListWorkspaces"),
 	"pethost:index:getMachine":         rpc("GetMachine"),
 	"pethost:index:getProject":         rpc("GetProject"),
 	"pethost:index:listCommits":        rpc("ListCommits"),

@@ -70,12 +70,17 @@ func (e *unfinished) Unwrap() error {
 
 // run calls the step with request, of the resource whose id field and value are given, and
 // answers with the last response once the operation it started has ended. The call answers once
-// the operation started, and the RPC that waits waits for it: a run's timeout then stops a wait,
-// with the operation known, and seldom the call that started it.
+// the operation started, and the RPC that waits waits for it, in the workspace the request
+// names: a run's timeout then stops a wait, with the operation known, and seldom the call that
+// started it.
 func (s *server) run(ctx context.Context, st *step, request protoreflect.Message, id protoreflect.FieldDescriptor, value string) (protoreflect.Message, error) {
 	fields := request.Descriptor().Fields()
 	request.Set(fields.ByName(operationIDField), protoreflect.ValueOfString(newOperationID()))
 	request.Set(fields.ByName(waitField), protoreflect.ValueOfUint32(0))
+	where := ""
+	if field := fields.ByName(workspaceField); field != nil {
+		where = request.Get(field).String()
+	}
 
 	response, err := s.client.call(ctx, st.method, request)
 	if err != nil {
@@ -84,12 +89,12 @@ func (s *server) run(ctx context.Context, st *step, request protoreflect.Message
 	if violations := s.lines(response, violationsField); len(violations) > 0 {
 		return nil, &refused{method: st.method.Name(), violations: violations}
 	}
-	return s.settle(ctx, st.method.Name(), response, id, value)
+	return s.settle(ctx, st.method.Name(), response, id, value, where)
 }
 
 // settle waits while the response's operation is in progress, and answers with the response that
 // saw it end; a response that names no operation is the step's end.
-func (s *server) settle(ctx context.Context, method protoreflect.Name, response protoreflect.Message, id protoreflect.FieldDescriptor, value string) (protoreflect.Message, error) {
+func (s *server) settle(ctx context.Context, method protoreflect.Name, response protoreflect.Message, id protoreflect.FieldDescriptor, value, where string) (protoreflect.Message, error) {
 	for {
 		field := response.Descriptor().Fields().ByName(operationField)
 		if !response.Has(field) {
@@ -106,7 +111,7 @@ func (s *server) settle(ctx context.Context, method protoreflect.Name, response 
 			return response, nil
 		case inProgress:
 			p.GetLogger(ctx).InfoStatusf("%s: operation %s is in progress", method, operationID)
-			next, err := s.wait(ctx, id, value, operationID)
+			next, err := s.wait(ctx, id, value, where, operationID)
 			if err != nil {
 				return nil, &unfinished{method: method, id: operationID, err: err}
 			}
@@ -124,13 +129,16 @@ func (s *server) settle(ctx context.Context, method protoreflect.Name, response 
 	}
 }
 
-// wait asks the RPC that waits for the operation's end, which answers once it ended or after a
-// while, and then again.
-func (s *server) wait(ctx context.Context, id protoreflect.FieldDescriptor, value, operationID string) (protoreflect.Message, error) {
+// wait asks the RPC that waits for the operation's end, in the workspace the step's request
+// named ("" = none), which answers once it ended or after a while, and then again.
+func (s *server) wait(ctx context.Context, id protoreflect.FieldDescriptor, value, where, operationID string) (protoreflect.Message, error) {
 	request := newMessage(waitRPC.Input())
 	fields := request.Descriptor().Fields()
 	request.Set(fields.ByName(id.Name()), protoreflect.ValueOfString(value))
 	request.Set(fields.ByName(operationIDField), protoreflect.ValueOfString(operationID))
+	if where != "" {
+		request.Set(fields.ByName(workspaceField), protoreflect.ValueOfString(where))
+	}
 	return s.client.call(ctx, waitRPC, request)
 }
 

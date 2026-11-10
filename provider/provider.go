@@ -42,15 +42,17 @@ func New(schema string) p.Provider {
 }
 
 type server struct {
-	schema string
-	client *client // Configure's.
+	schema    string
+	client    *client // Configure's.
+	workspace string  // Configure's: where a create goes, and a function, that names none; "" = the only one.
 }
 
 // configKeys are the provider's configuration, each with the variable of the environment that
 // stands in for it, as for the CLI.
 var configKeys = map[string]string{
-	"token": "PETHOST_TOKEN",
-	"url":   "PETHOST_URL",
+	"token":     "PETHOST_TOKEN",
+	"workspace": "PETHOST_WORKSPACE",
+	"url":       "PETHOST_URL",
 }
 
 func (s *server) getSchema(context.Context, p.GetSchemaRequest) (p.GetSchemaResponse, error) {
@@ -62,7 +64,8 @@ func (s *server) checkConfig(_ context.Context, req p.CheckRequest) (p.CheckResp
 	return p.CheckResponse{Inputs: req.Inputs}, nil
 }
 
-// diffConfig: another token or URL is another account or panel to call, which replaces nothing.
+// diffConfig: another token or URL is another account or panel to call, and another workspace
+// where the next creates go, which replaces nothing.
 func (s *server) diffConfig(_ context.Context, req p.DiffRequest) (p.DiffResponse, error) {
 	changed := false
 	for key := range configKeys {
@@ -88,6 +91,7 @@ func (s *server) configure(_ context.Context, req p.ConfigureRequest) error {
 		values["url"] = defaultURL
 	}
 	s.client = newClient(service, values["token"], values["url"])
+	s.workspace = values["workspace"]
 	return nil
 }
 
@@ -124,10 +128,14 @@ func (s *server) check(_ context.Context, req p.CheckRequest) (p.CheckResponse, 
 }
 
 // diff compares the inputs: a change of one that no update carries replaces the resource,
-// deleting it first, since the new one takes the same id.
-func (s *server) diff(_ context.Context, req p.DiffRequest) (p.DiffResponse, error) {
+// deleting it first, since the new one takes the same id. A change of its workspace is refused
+// (movedWorkspace).
+func (s *server) diff(ctx context.Context, req p.DiffRequest) (p.DiffResponse, error) {
 	r, err := s.resource(req.Urn)
 	if err != nil {
+		return p.DiffResponse{}, err
+	}
+	if err := s.movedWorkspace(ctx, r, req.ID, oldInputs(req.OldInputs, req.State), req.State, req.Inputs); err != nil {
 		return p.DiffResponse{}, err
 	}
 
@@ -150,10 +158,57 @@ func (s *server) diff(_ context.Context, req p.DiffRequest) (p.DiffResponse, err
 	return p.DiffResponse{HasChanges: len(diffs) > 0, DeleteBeforeReplace: replaces, DetailedDiff: diffs}, nil
 }
 
-// changed are the inputs whose value is not what it was: one not known yet counts as changed.
+// movedWorkspace refuses a workspace input that names another workspace than the resource is in:
+// it is where a create goes, and a later step goes where the state says the resource is, so the
+// change would move nothing, and a resource made again there would lose what it held. None,
+// its value as it was, the workspace its create was sent to and the id of the one it is in are
+// no move; nor is a name of the one it is in, which the API says by reading the resource in the
+// workspace named (sameWorkspace), as `workspace` = its name once a move took it there.
+func (s *server) movedWorkspace(ctx context.Context, r *resource, id string, before, state, after property.Map) error {
+	if r.workspace == nil {
+		return nil
+	}
+	key := r.workspace.JSONName()
+	is := after.Get(key)
+	if !is.IsString() || is.AsString() == "" || is.Equals(before.Get(key)) || is.Equals(state.Get(key)) {
+		return nil
+	}
+	in := state.Get(r.located.JSONName())
+	if !in.IsString() || in.AsString() == "" || in.AsString() == is.AsString() || s.sameWorkspace(ctx, r, id, is.AsString(), in.AsString(), state) {
+		return nil
+	}
+	return fmt.Errorf("%q is in workspace %s, and its %s names %q: changing it moves nothing. %s moves a "+
+		"project to another workspace; then set %s to where it went, or to %s while it stays",
+		id, in.AsString(), key, is.AsString(), moveRPC, key, in.AsString())
+}
+
+// sameWorkspace says whether the workspace named, by its id or its name, is the one the resource
+// is in, as the API resolves it: the resource read there is the one the state holds, by the output
+// a move keeps (same), or, for a state without it, answers that it is in the workspace of id in. So
+// a name of the workspace a move took it to is no move, before a refresh followed it there too. A
+// read that fails, or finds another project of that id, says no.
+func (s *server) sameWorkspace(ctx context.Context, r *resource, id, named, in string, state property.Map) bool {
+	outputs, err := s.readOutputs(ctx, r, id, named)
+	if err != nil {
+		return false
+	}
+	if r.same != nil {
+		if held := state.Get(r.same.JSONName()); held.IsString() && held.AsString() != "" {
+			return outputs.Get(r.same.JSONName()).Equals(held)
+		}
+	}
+	located := outputs.Get(r.located.JSONName())
+	return located.IsString() && located.AsString() == in
+}
+
+// changed are the inputs whose value is not what it was: one not known yet counts as changed. The
+// workspace is not among them: no step sends it but the create (movedWorkspace).
 func changed(r *resource, before, after property.Map) []protoreflect.FieldDescriptor {
 	var fields []protoreflect.FieldDescriptor
 	for _, input := range r.inputs {
+		if input == r.workspace {
+			continue
+		}
 		was, is := before.Get(input.JSONName()), after.Get(input.JSONName())
 		if is.HasComputed() || !was.Equals(is) {
 			fields = append(fields, input)

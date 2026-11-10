@@ -21,6 +21,13 @@ type resource struct {
 	updates  []*step
 	delete   *step
 	retry    *step
+
+	// Of a resource made in a workspace, the create request's input that says which (sent by the
+	// create alone), the output that says where it is, where every later step goes, and the one a
+	// move keeps, by which it is followed to where it moved; nil = it is made in none.
+	workspace protoreflect.FieldDescriptor
+	located   protoreflect.FieldDescriptor
+	same      protoreflect.FieldDescriptor
 }
 
 // step is an RPC as a step of a resource's life.

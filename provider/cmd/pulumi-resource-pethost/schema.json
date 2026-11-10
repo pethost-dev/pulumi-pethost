@@ -1,7 +1,7 @@
 {
   "name": "pethost",
   "displayName": "Pethost",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Manage Pethost's projects and databases as code.",
   "keywords": [
     "pulumi",
@@ -52,6 +52,10 @@
       "url": {
         "type": "string",
         "description": "Where the API is served. Absent = the environment's `PETHOST_URL`, else https://console.pethost.dev."
+      },
+      "workspace": {
+        "type": "string",
+        "description": "The workspace a resource is made in when its own `workspace` is absent, and that a function acts on when its request names none: its id or name. Absent = the environment's `PETHOST_WORKSPACE`, else the only workspace the token reaches."
       }
     }
   },
@@ -66,12 +70,16 @@
       "url": {
         "type": "string",
         "description": "Where the API is served. Absent = the environment's `PETHOST_URL`, else https://console.pethost.dev."
+      },
+      "workspace": {
+        "type": "string",
+        "description": "The workspace a resource is made in when its own `workspace` is absent, and that a function acts on when its request names none: its id or name. Absent = the environment's `PETHOST_WORKSPACE`, else the only workspace the token reaches."
       }
     }
   },
   "resources": {
     "pethost:index:Database": {
-      "description": "A database project, Postgres, MariaDB (for an app that asks for MySQL or MariaDB) or Valkey: the machine writes its compose.yaml and /.env and deploys it, with no address. Make it before the app that uses it: the app reaches it at the host `\u003cprojectId\u003e` once linked (the app's CreateProject `linkDatabases`, which may follow at once, as its deploy waits for this one; `link` or LinkDatabase for an app that exists, as the apps' user and writing nothing into its /.env), and Project.database says how to sign in. Or a copy of a database's snapshot, with passwords of its own and none of its links. Answers as CreateProject does. INVALID_ARGUMENT = an engine or a size Machine.databaseEngines does not offer, or a projectId with \"_\", that is a number or that every container's /etc/hosts names (it is the host name apps use). NOT_FOUND = no such snapshot or app. FAILED_PRECONDITION = the snapshot is of no database of that engine; + DatabaseLinkRefusal = an app of `link` cannot be linked, and nothing was created.\n\nPulumi creates it with CreateDatabase, waiting for its operation's end. It sends a change of `memoryLimitBytes` with RunProjectAction's `setDatabaseSize`, waiting for its operation's end. A change of `projectId`, `engine` or `fromSnapshotId` replaces it: Pulumi deletes it first, since the new one takes the same `projectId`, then creates it. If its create's operation fails, or the provider does not see it end, Pulumi keeps it with the failure, and the next run sends DeployProject until that succeeds. It deletes it with RunProjectAction's `deleteProject`, waiting for its operation's end. Its outputs are the fields of the Project that GetProject answers with, but those its inputs name; a refresh reads them anew.\n\ndeleteProject: a final backup while backups are on, then containers, volumes, files, hosts, logs, and an app's user and database of its own in a shared database, data and all. Snapshots stay (GetMachine.deletedProjects), and restoring one brings the project back, source included; with backups off there is none, and it is gone for good. The databases it was linked to stay: delete each with its own deleteProject.",
+      "description": "A database project, Postgres, MariaDB (for an app that asks for MySQL or MariaDB) or Valkey: the machine writes its compose.yaml and /.env and deploys it, with no address. Make it before the app that uses it: the app reaches it at the host `\u003cprojectId\u003e` once linked (the app's CreateProject `linkDatabases`, which may follow at once, as its deploy waits for this one; `link` or LinkDatabase for an app that exists, as the apps' user and writing nothing into its /.env), and Project.database says how to sign in. Or a copy of a database's snapshot, with passwords of its own and none of its links. Answers as CreateProject does. INVALID_ARGUMENT = an engine or a size Machine.databaseEngines does not offer, or a projectId with \"_\", that is a number or that every container's /etc/hosts names (it is the host name apps use). NOT_FOUND = no such snapshot or app. FAILED_PRECONDITION = the snapshot is of no database of that engine; + DatabaseLinkRefusal = an app of `link` cannot be linked, and nothing was created.\n\nPulumi creates it with CreateDatabase, waiting for its operation's end. It sends a change of `memoryLimitBytes` with RunProjectAction's `setDatabaseSize`, waiting for its operation's end. A change of `projectId`, `engine` or `fromSnapshotId` replaces it: Pulumi deletes it first, since the new one takes the same `projectId`, then creates it. Its create goes to the workspace `workspace` names, else to the provider's `workspace`; every later step goes where its `workspaceId` says it is. A change of `workspace` that names another workspace is refused, and replaces nothing: MoveProject moves a project, and `workspace` is then set to where it went. A refresh or a step that finds it moved (ProjectMoved) follows it there, and on through a later move, when the project there is the one the state holds, by its `uid`, and the state then says the workspace it is in; one that is not there is gone, as a deleted one is; otherwise it fails, and the state keeps the resource as it was. If its create's operation fails, or the provider does not see it end, Pulumi keeps it with the failure, and the next run sends DeployProject until that succeeds. It deletes it with RunProjectAction's `deleteProject`, waiting for its operation's end. Its outputs are the fields of the Project that GetProject answers with, but those its inputs name; a refresh reads them anew.\n\ndeleteProject: a final backup while backups are on, then containers, volumes, files, hosts, logs, and an app's user and database of its own in a shared database, data and all. Snapshots stay (GetMachine.deletedProjects), and restoring one brings the project back, source included; with backups off there is none, and it is gone for good. The databases it was linked to stay: delete each with its own deleteProject.",
       "properties": {
         "alerts": {
           "$ref": "#/types/pethost:index:ProjectAlerts",
@@ -88,6 +96,13 @@
               "name": "DatabaseInfo"
             }
           }
+        },
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:ProjectDependency"
+          },
+          "description": "The databases it is linked to (linkedDatabases), each with what MoveProject may do with it (switchDatabases)."
         },
         "deployId": {
           "type": "string",
@@ -210,6 +225,10 @@
           "$ref": "#/types/pethost:index:ProjectSource",
           "description": "Where the files come from (THE PROJECT IS ITS DIRECTORY)."
         },
+        "uid": {
+          "type": "string",
+          "description": "Made when it was created, and kept by its backups, restores and moves: a project deleted and created again under the same projectId has another. Empty = not known yet."
+        },
         "uptimeDays": {
           "type": "array",
           "items": {
@@ -227,6 +246,14 @@
             "$ref": "#/types/pethost:index:Volume"
           },
           "description": "Every one the machine holds for the project, by name."
+        },
+        "workspace": {
+          "type": "string",
+          "description": "The workspace: its id or name (ListWorkspaces). Omit when the account has one.\n\nIts create goes to the workspace `workspace` names, else to the provider's `workspace`; every later step goes where its `workspaceId` says it is. A change of `workspace` that names another workspace is refused, and replaces nothing: MoveProject moves a project, and `workspace` is then set to where it went. A refresh or a step that finds it moved (ProjectMoved) follows it there, and on through a later move, when the project there is the one the state holds, by its `uid`, and the state then says the workspace it is in; one that is not there is gone, as a deleted one is; otherwise it fails, and the state keeps the resource as it was."
+        },
+        "workspaceId": {
+          "type": "string",
+          "description": "The workspace it is in (Workspace.workspaceId): what a later call for it names as `workspace`."
         },
         "xPethostAppliesAtOnce": {
           "type": "boolean",
@@ -255,6 +282,10 @@
           "type": "string",
           "description": "As CreateProject's, without \"_\", not a number and no name of /etc/hosts: it is the host name apps use.\n\nChanging it replaces the database: Pulumi deletes it first, and what it held goes with it.",
           "willReplaceOnChanges": true
+        },
+        "workspace": {
+          "type": "string",
+          "description": "The workspace: its id or name (ListWorkspaces). Omit when the account has one.\n\nIts create goes to the workspace `workspace` names, else to the provider's `workspace`; every later step goes where its `workspaceId` says it is. A change of `workspace` that names another workspace is refused, and replaces nothing: MoveProject moves a project, and `workspace` is then set to where it went. A refresh or a step that finds it moved (ProjectMoved) follows it there, and on through a later move, when the project there is the one the state holds, by its `uid`, and the state then says the workspace it is in; one that is not there is gone, as a deleted one is; otherwise it fails, and the state keeps the resource as it was."
         }
       },
       "requiredInputs": [
@@ -262,7 +293,7 @@
       ]
     },
     "pethost:index:Project": {
-      "description": "Creates a project from its files and deploys it. Waits for the deploy (waitSeconds) and answers with the operation and, once it ended, the project: its URL, its services' states, its problems. `violations` instead = nothing was created: change what each says, call again. SUCCEEDED says the containers run and listen, not what a page answers: open the URL once (401 = its password page).\n\nFiles, one of: the directory as it is on your disk, as an archive (CreateTransfer, then `uploadId`): nothing is retyped; `files`, text you send yourself, when there is no directory or no shell (never a file you have not read); `source.github`. /.env holds the secrets (`envFile: .env`). The compose file is the root's pethost.compose.yaml (so the repository's compose.yaml stays for development), else compose.yaml, compose.yml, docker-compose.yml or docker-compose.yaml; it becomes /compose.yaml, other compose and override files are dropped. Without one, a Dockerfile yields service `app` (reading /.env if any, its EXPOSE ports, a named volume per VOLUME of its last stage).\n\nA database (Postgres, MariaDB or Valkey) is CreateDatabase's: make the app's first, then link it here with `linkDatabases`, e.g. {databaseProjectId: \"recipes-db\", envPrefix: \"DATABASE\"}, and compose.yaml reads ${DATABASE_URL:?}. The app reaches each at the host \\\u003cdatabaseProjectId\u003e from its first start (its deploy waits for one still being made). ownUser, on an engine whose offer has ownUsers (Postgres, MariaDB; a Valkey has one user), to share a database other apps use: a user and a database of its own, named as the project, which they cannot reach; all are restored together. Only linkDatabases makes one: LinkDatabase links as the apps' user. envPrefix \"DATABASE\": the machine writes DATABASE_URL, _HOST, _PORT, _USER, _PASSWORD and _NAME into /.env, so no password is copied. A name /.env sets already is refused, as a laptop's .env in an archive may set one: send `files` with a /.env without it beside `uploadId`.\n\ncompose.yaml rules. Data lives in named volumes; all else a container writes is lost when it is recreated. Project files are bind-mounted read-only. HTTP comes through the proxy, to a host of a route in `x-pethost`, the one extension read, in the file or as `xPethost`:\n\n```\nx-pethost:\n  metadata: {name: Recipe Box, emoji: \"🥗\", description: One line, notes: Free text}\n  routes:\n    - {host: recipes.sam.pethost.app, service: web, port: 3000}\n    - {host: recipes.sam.pethost.app, path: /api, service: api, port: 8000, strip_path: true}\n```\n\n`ports:` stays as the file has it, and is never refused. A TCP port it publishes that answers HTTP gets its route by itself and is not opened on the machine: at `\u003cproject\u003e.\u003cMachine.appsDomain\u003e`, or `\u003cproject\u003e-\u003cservice\u003e.\u003cappsDomain\u003e` each when the project has several; `Project.url` has it when the call answers. Any other published port opens on the machine as written, at `\u003cMachine.hostname\u003e:\u003cport\u003e`, and one that is taken there fails the deploy; so does a web port once its route is removed. Never opened: a port bound to 127.0.0.1 (`sshCommand` tunnels to it), a machine port of the machine's own (80, 443, 22), and one nothing listens on within a minute of its start, until a later deploy finds it listening (`Service.publishedPorts` lists what is open). With `xPethost.routes` the routes are yours and the machine names none. A project that publishes no port gets `\u003cproject\u003e.\u003cappsDomain\u003e` in its first deploy, for the one port it listens on. A service with neither is private: the project's services reach it at `\u003cservice\u003e:\u003cport\u003e`. A password for visitors goes only as `xPethost.password`, never into the file: every route then answers 401 with a password page, over HTTPS only; nothing returns it (`Project.passwordProtected` says it is set); and `files` that write /compose.yaml keep the `password_hash` line the machine put in its `x-pethost`. All of compose.yaml is interpolated: $$ for $.\n\nThe file runs as written, or is refused: the machine corrects nothing in it, in any version. Refused, each violation saying what to write instead:\n\n- a volume's `name`; `driver` (but Docker's default, `local` or `bridge`), `driver_opts`, `external` or `ipam` of a volume or network: remove them.\n- a writable bind mount of the whole project (`.:/app`): add `:ro`.\n- a volume with no name (`- /data`): name it. Below a bind mount it is allowed, as scratch space (`/app/node_modules`).\n- `envFile` naming a file the files lack: write it, empty if it sets nothing, or give the entry `required: false`.\n- `privileged`, `cap_add`, `security_opt` (but `no-new-privileges`), `devices`, host namespaces, the Docker socket, a path outside the directory; more than one replica; `include` or `extends` from a URL; a git URL as a build context.\n\nNot refused, and read the machine's way: a `container_name` and a network's `name` name nothing on the machine, so two projects may write the same (the project's services still reach the container by it); a service with `profiles` runs only while `COMPOSE_PROFILES` in /.env names one of them, and is no service of the project until then; a bind mount of a folder without `:ro` (`./data:/data`) mounts the project's volume named after the path (`data`), which deploys keep and backups hold, with none of the version's files in it, so project files take `:ro`, and data is plainer in a named volume (`data:/data`, with `data:` under `volumes:`); a bind mount of a file without `:ro` mounts it read-only. An image's VOLUME that no mount covers fails the deploy (UNCOVERED_IMAGE_VOLUME): mount a named volume or a tmpfs there.\n\nALREADY_EXISTS = the id is taken (a retry with its operationId returns that operation). FAILED_PRECONDITION = the GitHub App cannot read the repository (see GetMachine.github), or no such branch or directory; + DatabaseLinkRefusal = a database of `linkDatabases` cannot be linked to it (databaseProjectId says which), and nothing was created. A deleted project's id inherits its snapshots.\n\nPulumi creates it with CreateProject, waiting for its operation's end. It sends a change of `files`, `xPethost` or `timeoutSeconds` with DeployProject, waiting for its operation's end. A change of `projectId`, `source` or `linkDatabases` replaces it: Pulumi deletes it first, since the new one takes the same `projectId`, then creates it. If its create's operation fails, or the provider does not see it end, Pulumi keeps it with the failure, and the next run sends DeployProject until that succeeds. It deletes it with RunProjectAction's `deleteProject`, waiting for its operation's end. Its outputs are the fields of the Project that GetProject answers with, but those its inputs name; a refresh reads them anew.\n\ndeleteProject: a final backup while backups are on, then containers, volumes, files, hosts, logs, and an app's user and database of its own in a shared database, data and all. Snapshots stay (GetMachine.deletedProjects), and restoring one brings the project back, source included; with backups off there is none, and it is gone for good. The databases it was linked to stay: delete each with its own deleteProject.",
+      "description": "Creates a project from its files and deploys it. Waits for the deploy (waitSeconds) and answers with the operation and, once it ended, the project: its URL, its services' states, its problems. `violations` instead = nothing was created: change what each says, call again. SUCCEEDED says the containers run and listen, not what a page answers: open the URL once (401 = its password page).\n\nFiles, one of: the directory as it is on your disk, as an archive (CreateTransfer, then `uploadId`): nothing is retyped; `files`, text you send yourself, when there is no directory or no shell (never a file you have not read); `source.github`. /.env holds the secrets (`envFile: .env`). The compose file is the root's pethost.compose.yaml (so the repository's compose.yaml stays for development), else compose.yaml, compose.yml, docker-compose.yml or docker-compose.yaml; it becomes /compose.yaml, other compose and override files are dropped. Without one, a Dockerfile yields service `app` (reading /.env if any, its EXPOSE ports, a named volume per VOLUME of its last stage).\n\nA database (Postgres, MariaDB or Valkey) is CreateDatabase's: make the app's first, then link it here with `linkDatabases`, e.g. {databaseProjectId: \"recipes-db\", envPrefix: \"DATABASE\"}, and compose.yaml reads ${DATABASE_URL:?}. The app reaches each at the host \\\u003cdatabaseProjectId\u003e from its first start (its deploy waits for one still being made). ownUser, on an engine whose offer has ownUsers (Postgres, MariaDB; a Valkey has one user), to share a database other apps use: a user and a database of its own, named as the project, which they cannot reach; all are restored together. Only linkDatabases makes one: LinkDatabase links as the apps' user. envPrefix \"DATABASE\": the machine writes DATABASE_URL, _HOST, _PORT, _USER, _PASSWORD and _NAME into /.env, so no password is copied. A name /.env sets already is refused, as a laptop's .env in an archive may set one: send `files` with a /.env without it beside `uploadId`.\n\ncompose.yaml rules. Data lives in named volumes; all else a container writes is lost when it is recreated. Project files are bind-mounted read-only. HTTP comes through the proxy, to a host of a route in `x-pethost`, the one extension read, in the file or as `xPethost`:\n\n```\nx-pethost:\n  metadata: {name: Recipe Box, emoji: \"🥗\", description: One line, notes: Free text}\n  routes:\n    - {host: recipes.sam.pethost.app, service: web, port: 3000}\n    - {host: recipes.sam.pethost.app, path: /api, service: api, port: 8000, strip_path: true}\n```\n\n`ports:` stays as the file has it, and is never refused. A TCP port it publishes that answers HTTP gets its route by itself and is not opened on the machine: at `\u003cproject\u003e.\u003cMachine.appsDomain\u003e`, or `\u003cproject\u003e-\u003cservice\u003e.\u003cappsDomain\u003e` each when the project has several; `Project.url` has it when the call answers. Any other published port opens on the machine as written, at `\u003cMachine.hostname\u003e:\u003cport\u003e`, and one that is taken there fails the deploy; so does a web port once its route is removed. Never opened: a port bound to 127.0.0.1 (`sshCommand` tunnels to it), a machine port of the machine's own (80, 443, 22), and one nothing listens on within a minute of its start, until a later deploy finds it listening (`Service.publishedPorts` lists what is open). With `xPethost.routes` the routes are yours and the machine names none. A project that publishes no port gets `\u003cproject\u003e.\u003cappsDomain\u003e` in its first deploy, for the one port it listens on. A service with neither is private: the project's services reach it at `\u003cservice\u003e:\u003cport\u003e`. A password for visitors goes only as `xPethost.password`, never into the file: every route then answers 401 with a password page, over HTTPS only; nothing returns it (`Project.passwordProtected` says it is set); and `files` that write /compose.yaml keep the `password_hash` line the machine put in its `x-pethost`. All of compose.yaml is interpolated: $$ for $.\n\nThe file runs as written, or is refused: the machine corrects nothing in it, in any version. Refused, each violation saying what to write instead:\n\n- a volume's `name`; `driver` (but Docker's default, `local` or `bridge`), `driver_opts`, `external` or `ipam` of a volume or network: remove them.\n- a writable bind mount of the whole project (`.:/app`): add `:ro`.\n- a volume with no name (`- /data`): name it. Below a bind mount it is allowed, as scratch space (`/app/node_modules`).\n- `envFile` naming a file the files lack: write it, empty if it sets nothing, or give the entry `required: false`.\n- `privileged`, `cap_add`, `security_opt` (but `no-new-privileges`), `devices`, host namespaces, the Docker socket, a path outside the directory; more than one replica; `include` or `extends` from a URL; a git URL as a build context.\n\nNot refused, and read the machine's way: a `container_name` and a network's `name` name nothing on the machine, so two projects may write the same (the project's services still reach the container by it); a service with `profiles` runs only while `COMPOSE_PROFILES` in /.env names one of them, and is no service of the project until then; a bind mount of a folder without `:ro` (`./data:/data`) mounts the project's volume named after the path (`data`), which deploys keep and backups hold, with none of the version's files in it, so project files take `:ro`, and data is plainer in a named volume (`data:/data`, with `data:` under `volumes:`); a bind mount of a file without `:ro` mounts it read-only. An image's VOLUME that no mount covers fails the deploy (UNCOVERED_IMAGE_VOLUME): mount a named volume or a tmpfs there.\n\nALREADY_EXISTS = the id is taken (a retry with its operationId returns that operation). An uploadId: FAILED_PRECONDITION = not arrived; NOT_FOUND = expired or used; one the machine refused (its PUT said why) answers with its `violations`. FAILED_PRECONDITION = the GitHub App cannot read the repository (see GetMachine.github), or no such branch or directory; + DatabaseLinkRefusal = a database of `linkDatabases` cannot be linked to it (databaseProjectId says which), and nothing was created. A deleted project's id inherits its snapshots.\n\nPulumi creates it with CreateProject, waiting for its operation's end. It sends a change of `files`, `xPethost` or `timeoutSeconds` with DeployProject, waiting for its operation's end. A change of `projectId`, `source` or `linkDatabases` replaces it: Pulumi deletes it first, since the new one takes the same `projectId`, then creates it. Its create goes to the workspace `workspace` names, else to the provider's `workspace`; every later step goes where its `workspaceId` says it is. A change of `workspace` that names another workspace is refused, and replaces nothing: MoveProject moves a project, and `workspace` is then set to where it went. A refresh or a step that finds it moved (ProjectMoved) follows it there, and on through a later move, when the project there is the one the state holds, by its `uid`, and the state then says the workspace it is in; one that is not there is gone, as a deleted one is; otherwise it fails, and the state keeps the resource as it was. If its create's operation fails, or the provider does not see it end, Pulumi keeps it with the failure, and the next run sends DeployProject until that succeeds. It deletes it with RunProjectAction's `deleteProject`, waiting for its operation's end. Its outputs are the fields of the Project that GetProject answers with, but those its inputs name; a refresh reads them anew.\n\ndeleteProject: a final backup while backups are on, then containers, volumes, files, hosts, logs, and an app's user and database of its own in a shared database, data and all. Snapshots stay (GetMachine.deletedProjects), and restoring one brings the project back, source included; with backups off there is none, and it is gone for good. The databases it was linked to stay: delete each with its own deleteProject.",
       "properties": {
         "alerts": {
           "$ref": "#/types/pethost:index:ProjectAlerts",
@@ -274,6 +305,13 @@
         "database": {
           "$ref": "#/types/pethost:index:Database",
           "description": "Set = a database project (CreateDatabase): its engine, its state and how apps sign in."
+        },
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:ProjectDependency"
+          },
+          "description": "The databases it is linked to (linkedDatabases), each with what MoveProject may do with it (switchDatabases)."
         },
         "deployId": {
           "type": "string",
@@ -402,6 +440,10 @@
           "type": "integer",
           "description": "As DeployProject's timeoutSeconds.\n\nA change is sent with DeployProject: For the whole deploy, builds included; 0 = default."
         },
+        "uid": {
+          "type": "string",
+          "description": "Made when it was created, and kept by its backups, restores and moves: a project deleted and created again under the same projectId has another. Empty = not known yet."
+        },
         "uptimeDays": {
           "type": "array",
           "items": {
@@ -419,6 +461,14 @@
             "$ref": "#/types/pethost:index:Volume"
           },
           "description": "Every one the machine holds for the project, by name."
+        },
+        "workspace": {
+          "type": "string",
+          "description": "The workspace: its id or name (ListWorkspaces). Omit when the account has one.\n\nIts create goes to the workspace `workspace` names, else to the provider's `workspace`; every later step goes where its `workspaceId` says it is. A change of `workspace` that names another workspace is refused, and replaces nothing: MoveProject moves a project, and `workspace` is then set to where it went. A refresh or a step that finds it moved (ProjectMoved) follows it there, and on through a later move, when the project there is the one the state holds, by its `uid`, and the state then says the workspace it is in; one that is not there is gone, as a deleted one is; otherwise it fails, and the state keeps the resource as it was."
+        },
+        "workspaceId": {
+          "type": "string",
+          "description": "The workspace it is in (Workspace.workspaceId): what a later call for it names as `workspace`."
         },
         "xPethost": {
           "$ref": "#/types/pethost:index:ProjectExtension",
@@ -462,6 +512,10 @@
           "type": "integer",
           "description": "As DeployProject's timeoutSeconds.\n\nA change is sent with DeployProject: For the whole deploy, builds included; 0 = default."
         },
+        "workspace": {
+          "type": "string",
+          "description": "The workspace: its id or name (ListWorkspaces). Omit when the account has one.\n\nIts create goes to the workspace `workspace` names, else to the provider's `workspace`; every later step goes where its `workspaceId` says it is. A change of `workspace` that names another workspace is refused, and replaces nothing: MoveProject moves a project, and `workspace` is then set to where it went. A refresh or a step that finds it moved (ProjectMoved) follows it there, and on through a later move, when the project there is the one the state holds, by its `uid`, and the state then says the workspace it is in; one that is not there is gone, as a deleted one is; otherwise it fails, and the state keeps the resource as it was."
+        },
         "xPethost": {
           "$ref": "#/types/pethost:index:ProjectExtension",
           "description": "Changes to the files' x-pethost: the name people see, the routes, a password.\n\nA change is sent with DeployProject: Edits x-pethost by part, after `files`: metadata by key; routes all at once."
@@ -474,7 +528,15 @@
   },
   "functions": {
     "pethost:index:getMachine": {
-      "description": "Start here: the machine (resources, the person's domain, backups, SSH), every project with its problems and URL, deleted projects with snapshots, GitHub repositories to create projects from. Figures are the latest sample; disk sizes and the day's traffic lag a few minutes.",
+      "description": "Start here: the machine (resources, the person's domain, backups, SSH), every project with its problems and URL, deleted projects with snapshots, GitHub repositories to create projects from, and the workspace it serves. Figures are the latest sample; disk sizes and the day's traffic lag a few minutes. Several workspaces and no `workspace`: FAILED_PRECONDITION + WorkspaceChoice, which lists them.",
+      "inputs": {
+        "properties": {
+          "workspace": {
+            "type": "string",
+            "description": "The workspace: its id or name (ListWorkspaces). Omit when the account has one."
+          }
+        }
+      },
       "outputs": {
         "properties": {
           "deletedProjects": {
@@ -497,6 +559,10 @@
               "$ref": "#/types/pethost:index:ProjectSummary"
             },
             "description": "By projectId."
+          },
+          "workspace": {
+            "$ref": "#/types/pethost:index:Workspace",
+            "description": "The workspace whose machine this is."
           }
         }
       }
@@ -523,6 +589,10 @@
           "waitSeconds": {
             "type": "integer",
             "description": "How long to wait for it to end, ≤45. Absent = 45; 0 = answer at once."
+          },
+          "workspace": {
+            "type": "string",
+            "description": "The workspace: its id or name (ListWorkspaces). Omit when the account has one."
           }
         }
       },
@@ -538,6 +608,10 @@
           "logLineCount": {
             "type": "integer",
             "description": "Lines in the whole log so far."
+          },
+          "moveMessage": {
+            "type": "string",
+            "description": "A MOVE's, once it ended: MoveProjectResponse.moveMessage, what changed and what stayed behind, or why nothing moved."
           },
           "nextAfterLogLine": {
             "type": "integer",
@@ -583,6 +657,10 @@
           "uptimeDayCount": {
             "type": "integer",
             "description": "≤90: Project.uptimeDays. 0 = none."
+          },
+          "workspace": {
+            "type": "string",
+            "description": "The workspace: its id or name (ListWorkspaces). Omit when the account has one."
           }
         }
       },
@@ -604,6 +682,10 @@
           },
           "projectId": {
             "type": "string"
+          },
+          "workspace": {
+            "type": "string",
+            "description": "The workspace: its id or name (ListWorkspaces). Omit when the account has one."
           }
         }
       },
@@ -619,6 +701,51 @@
           "more": {
             "type": "boolean",
             "description": "Older ones exist: pass the last one's sha as beforeCommit."
+          }
+        }
+      }
+    },
+    "pethost:index:listWorkspaces": {
+      "description": "The workspaces the caller may reach, by name, 20 a page: each one's id, name, size and what is free, location, hostname and apps domain. With projectId, also which of them hold a project of that id (holdingProject). Free figures and project counts are each machine's latest sample, read now: one that did not answer in time leaves them absent (incomplete). The one call that takes no `workspace`. A caller that reaches none is refused as a call naming no workspace is: NoMachine (no plan) or WorkspaceNotGranted.",
+      "inputs": {
+        "properties": {
+          "pageToken": {
+            "type": "string",
+            "description": "A nextPageToken. Empty = the first page."
+          },
+          "projectId": {
+            "type": "string",
+            "description": "A projectId: holdingProject then says which workspaces have a project of that id."
+          }
+        }
+      },
+      "outputs": {
+        "properties": {
+          "holdingProject": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "With projectId: the workspaces that have a project of that id, by workspaceId. Empty = none of those that answered (see incomplete)."
+          },
+          "incomplete": {
+            "type": "boolean",
+            "description": "True = a machine did not answer in time: its free figures and project count are absent, and holdingProject may lack it."
+          },
+          "nextPageToken": {
+            "type": "string",
+            "description": "Empty = the last page."
+          },
+          "total": {
+            "type": "integer",
+            "description": "Workspaces in all, on every page."
+          },
+          "workspaces": {
+            "type": "array",
+            "items": {
+              "$ref": "#/types/pethost:index:Workspace"
+            },
+            "description": "By name."
           }
         }
       }
@@ -656,6 +783,10 @@
           "startTime": {
             "type": "string",
             "description": "Absent = the oldest kept."
+          },
+          "workspace": {
+            "type": "string",
+            "description": "The workspace: its id or name (ListWorkspaces). Omit when the account has one."
           }
         }
       },
@@ -723,6 +854,10 @@
           "startTime": {
             "type": "string",
             "description": "Absent = a day before endTime."
+          },
+          "workspace": {
+            "type": "string",
+            "description": "The workspace: its id or name (ListWorkspaces). Omit when the account has one."
           }
         }
       },
@@ -812,6 +947,10 @@
           "volume": {
             "type": "string",
             "description": "In the volume, from its root.\n\nAt most one of `service` or `volume` is set."
+          },
+          "workspace": {
+            "type": "string",
+            "description": "The workspace: its id or name (ListWorkspaces). Omit when the account has one."
           }
         }
       },
@@ -1208,6 +1347,10 @@
     "pethost:index:DeletedProject": {
       "type": "object",
       "properties": {
+        "movedTo": {
+          "$ref": "#/types/pethost:index:MovedTo",
+          "description": "Set when the latest move of the project from or to this workspace took it to another one, and this workspace has had no other project of the id since, as a call for it here would answer ProjectMoved: call it there (`workspace`), which answers for it as it is now. A restore here makes another copy here, as it was last backed up here, and calls here then act on that copy."
+        },
         "newestSnapshot": {
           "$ref": "#/types/pethost:index:Snapshot",
           "description": "Restore it to bring the project back as it was last backed up; GetProject then pages the older ones (snapshotsBefore)."
@@ -2130,6 +2273,22 @@
         }
       ]
     },
+    "pethost:index:MovedTo": {
+      "type": "object",
+      "description": "Where a move took a project (MoveProject), and when.",
+      "properties": {
+        "moveTime": {
+          "type": "string",
+          "description": "A Timestamp represents a point in time independent of any time zone or local calendar, encoded as a count of seconds and fractions of seconds at nanosecond resolution."
+        },
+        "workspaceId": {
+          "type": "string"
+        },
+        "workspaceName": {
+          "type": "string"
+        }
+      }
+    },
     "pethost:index:Operation": {
       "type": "object",
       "properties": {
@@ -2247,6 +2406,11 @@
         {
           "name": "Delete",
           "value": "DELETE"
+        },
+        {
+          "name": "Move",
+          "value": "MOVE",
+          "description": "MoveProject's, of the project it moves, in both workspaces. Its operationId is the move's, which GetOperation and WatchOperation answer in either, also with the projectId of a database the move holds."
         }
       ]
     },
@@ -2310,6 +2474,13 @@
         "database": {
           "$ref": "#/types/pethost:index:Database",
           "description": "Set = a database project (CreateDatabase): its engine, its state and how apps sign in."
+        },
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/pethost:index:ProjectDependency"
+          },
+          "description": "The databases it is linked to (linkedDatabases), each with what MoveProject may do with it (switchDatabases)."
         },
         "deployId": {
           "type": "string",
@@ -2416,6 +2587,10 @@
           "$ref": "#/types/pethost:index:ProjectSource",
           "description": "Where the files come from (THE PROJECT IS ITS DIRECTORY)."
         },
+        "uid": {
+          "type": "string",
+          "description": "Made when it was created, and kept by its backups, restores and moves: a project deleted and created again under the same projectId has another. Empty = not known yet."
+        },
         "uptimeDays": {
           "type": "array",
           "items": {
@@ -2433,6 +2608,10 @@
             "$ref": "#/types/pethost:index:Volume"
           },
           "description": "Every one the machine holds for the project, by name."
+        },
+        "workspaceId": {
+          "type": "string",
+          "description": "The workspace it is in (Workspace.workspaceId): what a later call for it names as `workspace`."
         },
         "xPethostAppliesAtOnce": {
           "type": "boolean",
@@ -2469,6 +2648,23 @@
         "uptimePercent": {
           "type": "number",
           "description": "Of the time the checks ran in the last 30 days, the share they were up, e.g. 99.97. Absent = no check ran."
+        }
+      }
+    },
+    "pethost:index:ProjectDependency": {
+      "type": "object",
+      "description": "A database a project is linked to, as MoveProject of the project sees it.",
+      "properties": {
+        "copyDatabase": {
+          "type": "string",
+          "description": "The database inside it whose data a move copies, unless DatabaseSwitch.empty: the one the project signs in to, its own where it has a user of its own (Database.ownUserProjects), else `app`. Empty = none can be: a Valkey, or a project whose id the engine keeps as a name of its own (`app`, `postgres`, `root`...), which uses a database there as the apps' user, so that a new one starts empty and one there is shared."
+        },
+        "databaseProjectId": {
+          "type": "string"
+        },
+        "envPrefix": {
+          "type": "string",
+          "description": "The prefix of the lines the machine wrote into the project's /.env of how it signs in to it (e.g. DATABASE for DATABASE_URL, _HOST, _PORT, _USER, _PASSWORD and _NAME), which the destination writes anew. Empty = a person wrote them (LinkDatabase linked it): a move needs DatabaseSwitch.envPrefix."
         }
       }
     },
@@ -2702,6 +2898,10 @@
             "$ref": "#/types/pethost:index:ServiceSummary"
           },
           "description": "By name."
+        },
+        "uid": {
+          "type": "string",
+          "description": "As Project.uid."
         },
         "url": {
           "type": "string",
@@ -3259,6 +3459,96 @@
           "type": "string"
         }
       }
+    },
+    "pethost:index:Workspace": {
+      "type": "object",
+      "description": "What one plan buys: a machine of the plan's size, its apps domain and its backups, and the projects on it. A call names it as `workspace`, by workspaceId or name.",
+      "properties": {
+        "appsDomain": {
+          "type": "string",
+          "description": "As Machine.appsDomain. Empty = none."
+        },
+        "cpuTotalCores": {
+          "type": "number",
+          "description": "The plan's."
+        },
+        "diskFreeBytes": {
+          "type": "integer",
+          "description": "Likewise. Absent as memoryFreeBytes."
+        },
+        "diskTotalBytes": {
+          "type": "integer",
+          "description": "The plan's, as Machine.diskTotalBytes."
+        },
+        "endTime": {
+          "type": "string",
+          "description": "When it ends: the person removed it, and it works until then, its projects with it. Absent = it is not ending."
+        },
+        "hostname": {
+          "type": "string",
+          "description": "Its machine's name, as Machine.hostname: SSH, transfers, and where a domain of the person's own points (CNAME). Empty while BEING_PREPARED."
+        },
+        "location": {
+          "type": "string",
+          "description": "Where its machine runs, e.g. \"Europe\"."
+        },
+        "memoryFreeBytes": {
+          "type": "integer",
+          "description": "What the projects leave of memoryTotalBytes, in its machine's latest sample. Absent = not known: BEING_PREPARED, or the machine did not answer in time."
+        },
+        "memoryTotalBytes": {
+          "type": "integer",
+          "description": "The plan's, as Machine.memoryTotalBytes."
+        },
+        "name": {
+          "type": "string",
+          "description": "The person's, e.g. \"Personal\": unique among their workspaces, in any case, and they may change it."
+        },
+        "plan": {
+          "type": "string",
+          "description": "Its plan's name, e.g. \"Starter\"."
+        },
+        "projectCount": {
+          "type": "integer",
+          "description": "Absent as memoryFreeBytes."
+        },
+        "role": {
+          "$ref": "#/types/pethost:index:WorkspaceRole",
+          "description": "The caller's."
+        },
+        "status": {
+          "$ref": "#/types/pethost:index:WorkspaceStatus"
+        },
+        "workspaceId": {
+          "type": "string",
+          "description": "8 characters of a-z and 2-7, e.g. \"k7f3q2xy\": what to keep, since it never changes and is never another workspace's."
+        }
+      }
+    },
+    "pethost:index:WorkspaceRole": {
+      "type": "string",
+      "enum": [
+        {
+          "name": "Owner",
+          "value": "OWNER",
+          "description": "Pays for it, and may do everything in it."
+        }
+      ]
+    },
+    "pethost:index:WorkspaceStatus": {
+      "type": "string",
+      "enum": [
+        {
+          "name": "Ready",
+          "value": "READY",
+          "description": "Its machine answers calls."
+        },
+        {
+          "name": "BeingPrepared",
+          "value": "BEING_PREPARED",
+          "description": "Paid, and its machine is being prepared: Pethost emails the person when it is ready. A call that names it is FAILED_PRECONDITION + NoMachine until then."
+        }
+      ]
     }
   }
 }

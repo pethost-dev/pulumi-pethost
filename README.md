@@ -68,7 +68,8 @@ replace it, deleting it first.
 
 | Function | What it reads |
 |---|---|
-| `pethost:index:getMachine` | Start here: the machine (resources, the person's domain, backups, SSH), every project with its problems and URL, deleted projects with snapshots, GitHub repositories to create projects from. |
+| `pethost:index:listWorkspaces` | The workspaces the caller may reach, by name, 20 a page: each one's id, name, size and what is free, location, hostname and apps domain. |
+| `pethost:index:getMachine` | Start here: the machine (resources, the person's domain, backups, SSH), every project with its problems and URL, deleted projects with snapshots, GitHub repositories to create projects from, and the workspace it serves. |
 | `pethost:index:getProject` | One project in full: services (state, health, image, the ports it listens on, volumes, environment, the SSH command), volumes, routes, hosts with certificates, recent operations, snapshots, the last day's HTTP traffic. |
 | `pethost:index:listCommits` | A github project's branch commits that change its directory, newest first, 30 a page, with whether the files are at it and its last deploy. |
 | `pethost:index:getOperation` | An operation, after waiting for it to end (waitSeconds): then the project as it is, and the log's end if it FAILED. |
@@ -79,6 +80,7 @@ replace it, deleting it first.
 ## Configuration
 
 - `pethost:token` (secret): The account's API token, `pth_…`: make one in the panel's Settings, under API tokens. Absent = the environment's `PETHOST_TOKEN`.
+- `pethost:workspace`: The workspace a resource is made in when its own `workspace` is absent, and that a function acts on when its request names none: its id or name. Absent = the environment's `PETHOST_WORKSPACE`, else the only workspace the token reaches.
 - `pethost:url`: Where the API is served. Absent = the environment's `PETHOST_URL`, else https://console.pethost.dev.
 
 Make the token in [the panel](https://console.pethost.dev), in Settings under "API tokens".

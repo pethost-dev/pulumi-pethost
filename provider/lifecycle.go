@@ -26,8 +26,10 @@ func (s *server) create(ctx context.Context, req p.CreateRequest) (p.CreateRespo
 	}
 
 	id := req.Properties.Get(r.id.JSONName()).AsString()
+	properties := s.madeIn(r, req.Properties)
+	where := workspaceOf(r, properties)
 	request := newMessage(r.create.method.Input())
-	if err := setFields(request, req.Properties, names(r.inputs)); err != nil {
+	if err := setFields(request, properties, names(r.inputs)); err != nil {
 		return p.CreateResponse{}, err
 	}
 	ctx, cancel := withTimeout(ctx, req.Timeout)
@@ -40,30 +42,37 @@ func (s *server) create(ctx context.Context, req p.CreateRequest) (p.CreateRespo
 	// The resource is made, and its operation failed, or goes on unseen: Pulumi keeps it, and
 	// sends the retry step at the next run.
 	case errors.As(err, &failed):
-		outputs, _ := s.outputs(ctx, r, id, response)
-		return p.CreateResponse{ID: id, Properties: merged(req.Properties, outputs), PartialState: &p.InitializationFailed{Reasons: []string{failed.summary()}}}, err
+		outputs, _ := s.outputs(ctx, r, id, where, response)
+		return p.CreateResponse{ID: id, Properties: merged(properties, outputs), PartialState: &p.InitializationFailed{Reasons: []string{failed.summary()}}}, err
 	case errors.As(err, &stopped):
-		return p.CreateResponse{ID: id, Properties: req.Properties, PartialState: &p.InitializationFailed{Reasons: []string{stopped.Error()}}}, err
+		return p.CreateResponse{ID: id, Properties: properties, PartialState: &p.InitializationFailed{Reasons: []string{stopped.Error()}}}, err
 	case err != nil:
 		return p.CreateResponse{}, err
 	}
 
-	outputs, err := s.outputs(ctx, r, id, response)
+	outputs, err := s.outputs(ctx, r, id, where, response)
 	if err != nil {
-		return p.CreateResponse{ID: id, Properties: req.Properties, PartialState: &p.InitializationFailed{Reasons: []string{err.Error()}}}, err
+		return p.CreateResponse{ID: id, Properties: properties, PartialState: &p.InitializationFailed{Reasons: []string{err.Error()}}}, err
 	}
-	return p.CreateResponse{ID: id, Properties: merged(req.Properties, outputs)}, nil
+	return p.CreateResponse{ID: id, Properties: merged(properties, outputs)}, nil
 }
 
 // read is a refresh: the outputs read anew, the inputs as recorded. An import has none
-// recorded, and takes the id for its only input.
+// recorded, and takes the id for its only input, read in the configuration's workspace.
 func (s *server) read(ctx context.Context, req p.ReadRequest) (p.ReadResponse, error) {
 	r, err := s.resource(req.Urn)
 	if err != nil {
 		return p.ReadResponse{}, err
 	}
 
-	outputs, err := s.readOutputs(ctx, r, req.ID)
+	where := workspaceOf(r, req.Properties)
+	if req.Properties.Len() == 0 {
+		where = s.workspace
+	}
+	outputs, err := s.readOutputs(ctx, r, req.ID, where)
+	if err != nil && !notFound(err) {
+		outputs, err = s.follow(ctx, r, req.ID, req.Properties, err)
+	}
 	switch {
 	case notFound(err):
 		return p.ReadResponse{}, nil // Gone: Pulumi forgets it.
@@ -105,18 +114,19 @@ func (s *server) update(ctx context.Context, req p.UpdateRequest) (p.UpdateRespo
 	defer cancel()
 
 	old := oldInputs(req.OldInputs, req.State)
+	state := req.State
 	var response protoreflect.Message
 	for _, u := range dueSteps(r, changed(r, old, req.Inputs)) {
-		request, err := s.updateRequest(r, u, req.ID, req.State, req.Inputs)
-		if err != nil {
-			return p.UpdateResponse{}, err
+		var err error
+		request := func(state property.Map) (protoreflect.Message, error) {
+			return s.updateRequest(r, u, req.ID, state, req.Inputs)
 		}
-		if response, err = s.run(ctx, u, request, r.id, req.ID); err != nil {
-			return s.failedUpdate(ctx, r, req, response, err)
+		if state, response, err = s.runFollowing(ctx, r, req.ID, state, u, request); err != nil {
+			return s.failedUpdate(ctx, r, req.Inputs, req.ID, state, response, err)
 		}
 	}
 
-	outputs, err := s.outputs(ctx, r, req.ID, response)
+	outputs, err := s.outputs(ctx, r, req.ID, workspaceOf(r, state), response)
 	if err != nil {
 		return p.UpdateResponse{}, err
 	}
@@ -132,13 +142,13 @@ func (s *server) update(ctx context.Context, req p.UpdateRequest) (p.UpdateRespo
 // ponytail: every resource has one update step, so a step that failed is all that was due. A
 // resource with several, each with edits, would hold those of a later step that was never sent:
 // answer then with only what the steps sent so far carry.
-func (s *server) failedUpdate(ctx context.Context, r *resource, req p.UpdateRequest, response protoreflect.Message, err error) (p.UpdateResponse, error) {
+func (s *server) failedUpdate(ctx context.Context, r *resource, inputs property.Map, id string, state property.Map, response protoreflect.Message, err error) (p.UpdateResponse, error) {
 	var failed *operationFailed
 	if !errors.As(err, &failed) || !failed.madeCurrent {
 		return p.UpdateResponse{}, err
 	}
-	outputs, _ := s.outputs(ctx, r, req.ID, response)
-	return p.UpdateResponse{Properties: merged(req.Inputs, outputs), PartialState: &p.InitializationFailed{Reasons: []string{failed.summary()}}}, err
+	outputs, _ := s.outputs(ctx, r, id, workspaceOf(r, state), response)
+	return p.UpdateResponse{Properties: merged(inputs, outputs), PartialState: &p.InitializationFailed{Reasons: []string{failed.summary()}}}, err
 }
 
 // dueSteps are the update steps that carry one of the inputs that changed, in the table's order;
@@ -166,12 +176,12 @@ func carriesAny(u *step, inputs []protoreflect.FieldDescriptor) bool {
 	return false
 }
 
-// updateRequest is the step's request for the resource: its id, and the inputs it carries that
-// are given, in its action's message if it sets one. A list of edits goes with only the edits
-// the state's value lacks, the others being made.
+// updateRequest is the step's request for the resource: its id and the workspace its state says
+// it is in, and the inputs it carries that are given, in its action's message if it sets one. A
+// list of edits goes with only the edits the state's value lacks, the others being made.
 func (s *server) updateRequest(r *resource, u *step, id string, state, inputs property.Map) (protoreflect.Message, error) {
 	request := newMessage(u.method.Input())
-	request.Set(request.Descriptor().Fields().ByName(r.id.Name()), protoreflect.ValueOfString(id))
+	address(request, r, id, workspaceOf(r, state))
 	target := request
 	if u.action != nil {
 		target = request.Mutable(u.action).Message()
@@ -209,12 +219,15 @@ func (s *server) delete(ctx context.Context, req p.DeleteRequest) error {
 	ctx, cancel := withTimeout(ctx, req.Timeout)
 	defer cancel()
 
-	request := newMessage(r.delete.method.Input())
-	request.Set(request.Descriptor().Fields().ByName(r.id.Name()), protoreflect.ValueOfString(req.ID))
-	if r.delete.action != nil {
-		request.Mutable(r.delete.action)
+	request := func(state property.Map) (protoreflect.Message, error) {
+		message := newMessage(r.delete.method.Input())
+		address(message, r, req.ID, workspaceOf(r, state))
+		if r.delete.action != nil {
+			message.Mutable(r.delete.action)
+		}
+		return message, nil
 	}
-	_, err = s.run(ctx, r.delete, request, r.id, req.ID)
+	_, _, err = s.runFollowing(ctx, r, req.ID, req.Properties, r.delete, request)
 	if notFound(err) {
 		return nil // Gone already.
 	}
@@ -230,6 +243,9 @@ func (s *server) invoke(ctx context.Context, req p.InvokeRequest) (p.InvokeRespo
 	if err := fromMap(request, req.Args); err != nil {
 		return p.InvokeResponse{Failures: []p.CheckFailure{{Reason: err.Error()}}}, nil
 	}
+	if field := method.Input().Fields().ByName(workspaceField); field != nil && !request.Has(field) && s.workspace != "" {
+		request.Set(field, protoreflect.ValueOfString(s.workspace))
+	}
 	response, err := s.client.call(ctx, method, request)
 	if err != nil {
 		return p.InvokeResponse{}, err
@@ -237,12 +253,13 @@ func (s *server) invoke(ctx context.Context, req p.InvokeRequest) (p.InvokeRespo
 	return p.InvokeResponse{Return: toMap(response)}, nil
 }
 
-// outputs are the resource's outputs: as the step's last response holds them, or else read.
-func (s *server) outputs(ctx context.Context, r *resource, id string, response protoreflect.Message) (property.Map, error) {
+// outputs are the resource's outputs: as the step's last response holds them, or else read in
+// the workspace named.
+func (s *server) outputs(ctx context.Context, r *resource, id, where string, response protoreflect.Message) (property.Map, error) {
 	if outputs, ok := outputsOf(r, response); ok {
 		return outputs, nil
 	}
-	return s.readOutputs(ctx, r, id)
+	return s.readOutputs(ctx, r, id, where)
 }
 
 // outputsOf are the outputs a step's response holds as the read response does, in a field of the
@@ -258,10 +275,10 @@ func outputsOf(r *resource, response protoreflect.Message) (property.Map, bool) 
 	return outputValues(r, response.Get(field).Message()), true
 }
 
-// readOutputs reads the resource by its id.
-func (s *server) readOutputs(ctx context.Context, r *resource, id string) (property.Map, error) {
+// readOutputs reads the resource by its id, in the workspace named.
+func (s *server) readOutputs(ctx context.Context, r *resource, id, where string) (property.Map, error) {
 	request := newMessage(r.read.method.Input())
-	request.Set(request.Descriptor().Fields().ByName(r.id.Name()), protoreflect.ValueOfString(id))
+	address(request, r, id, where)
 	response, err := s.client.call(ctx, r.read.method, request)
 	if err != nil {
 		return property.Map{}, err
