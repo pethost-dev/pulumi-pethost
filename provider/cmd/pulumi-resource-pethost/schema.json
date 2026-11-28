@@ -1,7 +1,7 @@
 {
   "name": "pethost",
   "displayName": "Pethost",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "Manage Pethost's projects and databases as code.",
   "keywords": [
     "pulumi",
@@ -1779,6 +1779,10 @@
               "name": "HostInfo"
             }
           }
+        },
+        "ownDomain": {
+          "type": "boolean",
+          "description": "A domain the person owns, outside the panel's domain and the machines' names: it answers once its DNS points at Machine.hostname (a CNAME, an ALIAS at the apex). False = a name of Pethost's: under Machine.appsDomain, or unavailableMessage says why it answers nobody."
         },
         "unavailableMessage": {
           "type": "string",

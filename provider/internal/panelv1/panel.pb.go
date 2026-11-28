@@ -10421,6 +10421,7 @@ type Host struct {
 	xxx_hidden_CertificateSource     CertificateSource      `protobuf:"varint,3,opt,name=certificate_source,json=certificateSource,enum=pethost.panel.v1.CertificateSource"`
 	xxx_hidden_CertificateExpireTime *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=certificate_expire_time,json=certificateExpireTime"`
 	xxx_hidden_UnavailableMessage    *string                `protobuf:"bytes,5,opt,name=unavailable_message,json=unavailableMessage"`
+	xxx_hidden_OwnDomain             bool                   `protobuf:"varint,6,opt,name=own_domain,json=ownDomain"`
 	XXX_raceDetectHookData           protoimpl.RaceDetectHookData
 	XXX_presence                     [1]uint32
 	unknownFields                    protoimpl.UnknownFields
@@ -10498,19 +10499,26 @@ func (x *Host) GetUnavailableMessage() string {
 	return ""
 }
 
+func (x *Host) GetOwnDomain() bool {
+	if x != nil {
+		return x.xxx_hidden_OwnDomain
+	}
+	return false
+}
+
 func (x *Host) SetHost(v string) {
 	x.xxx_hidden_Host = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 5)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 6)
 }
 
 func (x *Host) SetUrl(v string) {
 	x.xxx_hidden_Url = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 5)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 6)
 }
 
 func (x *Host) SetCertificateSource(v CertificateSource) {
 	x.xxx_hidden_CertificateSource = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 5)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 6)
 }
 
 func (x *Host) SetCertificateExpireTime(v *timestamppb.Timestamp) {
@@ -10519,7 +10527,12 @@ func (x *Host) SetCertificateExpireTime(v *timestamppb.Timestamp) {
 
 func (x *Host) SetUnavailableMessage(v string) {
 	x.xxx_hidden_UnavailableMessage = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 5)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 6)
+}
+
+func (x *Host) SetOwnDomain(v bool) {
+	x.xxx_hidden_OwnDomain = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 6)
 }
 
 func (x *Host) HasHost() bool {
@@ -10557,6 +10570,13 @@ func (x *Host) HasUnavailableMessage() bool {
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 4)
 }
 
+func (x *Host) HasOwnDomain() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 5)
+}
+
 func (x *Host) ClearHost() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
 	x.xxx_hidden_Host = nil
@@ -10581,6 +10601,11 @@ func (x *Host) ClearUnavailableMessage() {
 	x.xxx_hidden_UnavailableMessage = nil
 }
 
+func (x *Host) ClearOwnDomain() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 5)
+	x.xxx_hidden_OwnDomain = false
+}
+
 type Host_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
@@ -10599,6 +10624,10 @@ type Host_builder struct {
 	// a minute of the change, unless the project's last deploy failed or another project has that
 	// name. Empty = it answers, or it is the person's own domain.
 	UnavailableMessage *string
+	// A domain the person owns, outside the panel's domain and the machines' names: it answers
+	// once its DNS points at Machine.hostname (a CNAME, an ALIAS at the apex). False = a name of
+	// Pethost's: under Machine.apps_domain, or unavailable_message says why it answers nobody.
+	OwnDomain *bool
 }
 
 func (b0 Host_builder) Build() *Host {
@@ -10606,21 +10635,25 @@ func (b0 Host_builder) Build() *Host {
 	b, x := &b0, m0
 	_, _ = b, x
 	if b.Host != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 5)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 6)
 		x.xxx_hidden_Host = b.Host
 	}
 	if b.Url != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 5)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 6)
 		x.xxx_hidden_Url = b.Url
 	}
 	if b.CertificateSource != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 5)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 6)
 		x.xxx_hidden_CertificateSource = *b.CertificateSource
 	}
 	x.xxx_hidden_CertificateExpireTime = b.CertificateExpireTime
 	if b.UnavailableMessage != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 5)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 6)
 		x.xxx_hidden_UnavailableMessage = b.UnavailableMessage
+	}
+	if b.OwnDomain != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 6)
+		x.xxx_hidden_OwnDomain = *b.OwnDomain
 	}
 	return m0
 }
@@ -34507,13 +34540,15 @@ const file_v1_panel_proto_rawDesc = "" +
 	"\bdeclared\x18\x05 \x01(\bR\bdeclared\"R\n" +
 	"\x0fVolumeMountedBy\x12\x18\n" +
 	"\aservice\x18\x01 \x01(\tR\aservice\x12%\n" +
-	"\x0econtainer_path\x18\x02 \x01(\tR\rcontainerPath\"\x85\x02\n" +
+	"\x0econtainer_path\x18\x02 \x01(\tR\rcontainerPath\"\xa4\x02\n" +
 	"\x04Host\x12\x12\n" +
 	"\x04host\x18\x01 \x01(\tR\x04host\x12\x10\n" +
 	"\x03url\x18\x02 \x01(\tR\x03url\x12R\n" +
 	"\x12certificate_source\x18\x03 \x01(\x0e2#.pethost.panel.v1.CertificateSourceR\x11certificateSource\x12R\n" +
 	"\x17certificate_expire_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x15certificateExpireTime\x12/\n" +
-	"\x13unavailable_message\x18\x05 \x01(\tR\x12unavailableMessage\"|\n" +
+	"\x13unavailable_message\x18\x05 \x01(\tR\x12unavailableMessage\x12\x1d\n" +
+	"\n" +
+	"own_domain\x18\x06 \x01(\bR\townDomain\"|\n" +
 	"\x05Route\x12\x12\n" +
 	"\x04host\x18\x01 \x01(\tR\x04host\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12\x18\n" +
